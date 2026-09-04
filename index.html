@@ -1,356 +1,206 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>来客受付</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    /* Guide Overlay Line Animations */
-    .scan-line {
-      position: absolute;
-      width: 100%;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, #10b981, transparent);
-      animation: scan 1.8s linear infinite;
-    }
-    @keyframes scan {
-      0% { top: 0%; }
-      100% { top: 100%; }
-    }
-    
-    /* Countdown Circle Progress */
-    .progress-ring__circle {
-      transition: stroke-dashoffset 0.1s linear;
-      transform: rotate(-90deg);
-      transform-origin: 50% 50%;
-    }
-  </style>
-</head>
-<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col items-center justify-between p-4 font-sans">
-
-  <!-- Top Header -->
-  <header class="w-full max-w-lg text-center pt-2 pb-2">
-    <h1 class="text-2xl font-bold tracking-wide text-white">ご来訪受付</h1>
-    <p class="text-sm text-slate-400 mt-1" id="statusMessage">名刺を枠内にかざしてください</p>
-  </header>
-
-  <!-- Camera Frame Section -->
-  <main class="relative w-full max-w-md aspect-[3/4] bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-700 flex items-center justify-center">
-    
-    <!-- Live Video Stream -->
-    <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover"></video>
-    
-    <!-- Analysis Canvas (hidden) -->
-    <canvas id="processCanvas" class="hidden"></canvas>
-
-    <!-- Overlay Guide Box (Standard Business Card Aspect ~ 1.65:1) -->
-    <div id="guideBox" class="absolute w-[82%] h-[48%] border-2 border-dashed border-slate-400/80 rounded-lg flex flex-col justify-between p-2 transition-all duration-300 pointer-events-none">
-      <!-- Corner Markers -->
-      <div class="flex justify-between">
-        <div class="w-4 h-4 border-t-4 border-l-4 border-slate-200 rounded-tl"></div>
-        <div class="w-4 h-4 border-t-4 border-r-4 border-slate-200 rounded-tr"></div>
-      </div>
-
-      <!-- Scanning Beam Effect (Shows when detecting) -->
-      <div id="scanLine" class="scan-line hidden"></div>
-
-      <div class="flex justify-between">
-        <div class="w-4 h-4 border-b-4 border-l-4 border-slate-200 rounded-bl"></div>
-        <div class="w-4 h-4 border-b-4 border-r-4 border-slate-200 rounded-br"></div>
-      </div>
-    </div>
-
-    <!-- Countdown & Hold Animation Indicator -->
-    <div id="countdownOverlay" class="absolute inset-0 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center opacity-0 transition-opacity duration-200 pointer-events-none">
-      <div class="relative w-28 h-28 flex items-center justify-center">
-        <svg class="w-full h-full">
-          <circle class="text-slate-600" stroke-width="6" stroke="currentColor" fill="transparent" r="48" cx="56" cy="56"/>
-          <circle id="progressCircle" class="text-emerald-400 progress-ring__circle" stroke-width="6" stroke-dasharray="301.59" stroke-dashoffset="301.59" stroke-linecap="round" stroke="currentColor" fill="transparent" r="48" cx="56" cy="56"/>
-        </svg>
-        <span id="countdownText" class="absolute text-center text-xs font-bold text-white leading-tight">そのまま<br>動かさないでください</span>
-      </div>
-      <p class="text-emerald-400 font-semibold text-sm mt-3">自動シャッター切断中...</p>
-    </div>
-
-    <!-- Initializing Camera Overlay -->
-    <div id="cameraLoading" class="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center gap-3 p-4 text-center z-10">
-      <div id="loadingSpinner" class="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-      <p id="loadingStatusText" class="text-sm text-slate-300">カメラを起動しています...</p>
-      
-      <!-- Demo / Retry Fallback Button -->
-      <button id="demoBtn" onclick="startDemoMode()" class="hidden mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg transition shadow-md">
-        デモモードで動作確認する（カメラ不要）
+<!-- ... existing code ... -->
+      <!-- Manual Capture Button -->
+      <button id="manualBtn" onclick="takePhoto()" class="w-full max-w-xs py-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold text-sm rounded-xl border border-slate-600 transition flex items-center justify-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h0.93a2 2 0 001.664-.89l0.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l0.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+        手動で撮影する
       </button>
-    </div>
-  </main>
+    </footer>
 
-  <!-- Bottom Actions -->
-  <footer class="w-full max-w-lg flex flex-col items-center gap-3 pb-2">
-    <div class="flex items-center gap-2 text-xs text-slate-400">
-      <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-      スマートオートシャッター有効
-    </div>
-
-    <!-- Manual Capture Button -->
-    <button id="manualBtn" onclick="takePhoto()" class="w-full max-w-xs py-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold text-sm rounded-xl border border-slate-600 transition flex items-center justify-center gap-2">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h0.93a2 2 0 001.664-.89l0.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l0.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
-      手動で撮影する
-    </button>
-  </footer>
-
-  <script>
-    const video = document.getElementById('webcam');
-    const canvas = document.getElementById('processCanvas');
-    const guideBox = document.getElementById('guideBox');
-    const scanLine = document.getElementById('scanLine');
-    const statusMessage = document.getElementById('statusMessage');
-    const countdownOverlay = document.getElementById('countdownOverlay');
-    const progressCircle = document.getElementById('progressCircle');
-    const cameraLoading = document.getElementById('cameraLoading');
-    const loadingSpinner = document.getElementById('loadingSpinner');
-    const loadingStatusText = document.getElementById('loadingStatusText');
-    const demoBtn = document.getElementById('demoBtn');
-
-    let isCapturing = false;
-    let holdStartTime = null;
-    let lastFrameData = null;
-    let isDemoMode = false;
-    let demoProgress = 0;
-    const HOLD_DURATION_MS = 1000;
-    const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * 48;
-
-    // 1. カメラ起動（段階的フォールバック付き）
-    async function initCamera() {
-      // 3秒経っても起動しない場合はデモ切り替えボタンを表示
-      const timeoutTimer = setTimeout(() => {
-        showCameraError("カメラの起動に時間がかかっています。");
-      }, 3000);
-
-      try {
-        // 第一優先: リアカメラ優先指定
-        let stream = await getMediaStream({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
-        clearTimeout(timeoutTimer);
-        setupVideoStream(stream);
-      } catch (err1) {
-        try {
-          // 第二優先: 標準カメラ（PCウェブカメラ等）
-          let stream = await getMediaStream({ video: true });
-          clearTimeout(timeoutTimer);
-          setupVideoStream(stream);
-        } catch (err2) {
-          clearTimeout(timeoutTimer);
-          showCameraError("カメラにアクセスできませんでした。");
-        }
-      }
-    }
-
-    function getMediaStream(constraints) {
-      return navigator.mediaDevices.getUserMedia(constraints);
-    }
-
-    function setupVideoStream(stream) {
-      video.srcObject = stream;
-      video.onloadedmetadata = () => {
-        video.play().then(() => {
-          cameraLoading.classList.add('hidden');
-          requestAnimationFrame(processVideoFrame);
-        }).catch(() => {
-          showCameraError("動画の再生を開始できませんでした。");
-        });
-      };
-    }
-
-    function showCameraError(msg) {
-      loadingSpinner.classList.add('hidden');
-      loadingStatusText.innerHTML = `<span class="text-rose-400 font-medium">${msg}</span><br><span class="text-xs text-slate-400 mt-1 block">下のボタンからデモ動作をご確認いただけます。</span>`;
-      demoBtn.classList.remove('hidden');
-    }
-
-    // デモモード（実機カメラがなくても枠内検知〜自動シャッターの挙動を確認可能）
-    function startDemoMode() {
-      isDemoMode = true;
-      cameraLoading.classList.add('hidden');
-      statusMessage.textContent = '【デモモード】名刺が近づいて自動撮影されます';
-      
-      // 仮想キャンバスで名刺が近づく映像をシミュレーション
-      const demoCanvas = document.createElement('canvas');
-      demoCanvas.width = 640;
-      demoCanvas.height = 480;
-      const dCtx = demoCanvas.getContext('2d');
-
-      function renderDemo() {
-        if (isCapturing) return;
+    <!-- 撮影画像確認・保存モーダル -->
+    <div id="resultModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 hidden opacity-0 transition-opacity duration-300">
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-5 text-center shadow-2xl flex flex-col items-center">
+        <div class="w-10 h-10 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center mb-3">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-1">この画像でよろしいですか？</h3>
+        <p class="text-xs text-slate-400 mb-4">ブレや反射、文字の見切れがないかご確認ください</p>
         
-        // 背景（暗い卓上）
-        dCtx.fillStyle = '#1e293b';
-        dCtx.fillRect(0, 0, 640, 480);
+        <!-- Preview of captured card -->
+        <div class="w-full aspect-[1.6/1] bg-black rounded-lg overflow-hidden border border-slate-700 mb-4 shadow-md">
+          <img id="previewImage" class="w-full h-full object-contain" alt="撮影された名刺">
+        </div>
 
-        demoProgress += 0.015;
-        const cycle = Math.sin(demoProgress); // 0〜1を往復
+        <div class="w-full flex gap-2">
+          <button onclick="retakePhoto()" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-xl text-slate-200 border border-slate-600 transition flex items-center justify-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            撮り直す
+          </button>
+          <button onclick="confirmAndSavePhoto()" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-xs font-bold rounded-xl text-white shadow-lg transition flex items-center justify-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            OK（保存する）
+          </button>
+        </div>
+      </div>
+    </div>
 
-        // サイクル後半で名刺が中央枠内に収まって静止するシミュレーション
-        if (cycle > 0.3) {
-          // 白い名刺を描画
-          dCtx.fillStyle = '#ffffff';
-          dCtx.shadowColor = 'rgba(0,0,0,0.5)';
-          dCtx.shadowBlur = 15;
-          dCtx.fillRect(160, 140, 320, 200);
+    <script>
+      // ... existing code ...
+      let isCapturing = false;
+      let holdStartTime = null;
+      let lastFrameData = null;
+      let isDemoMode = false;
+      let demoProgress = 0;
+      let activeDemoCanvas = null; // デモキャンバス保持用
+      let lastCapturedDataUrl = null;
+      const HOLD_DURATION_MS = 1000;
+      const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * 48;
+
+      // ... existing code ...
+      function startDemoMode() {
+        isDemoMode = true;
+        cameraLoading.classList.add('hidden');
+        statusMessage.textContent = '【デモモード】名刺が近づいて自動撮影されます';
+        
+        // 仮想キャンバスで名刺が近づく映像をシミュレーション
+        const demoCanvas = document.createElement('canvas');
+        demoCanvas.width = 640;
+        demoCanvas.height = 480;
+        activeDemoCanvas = demoCanvas;
+        const dCtx = demoCanvas.getContext('2d');
+
+        function renderDemo() {
+          if (isCapturing) return;
           
-          // 名刺上のテキストデザイン
-          dCtx.shadowBlur = 0;
-          dCtx.fillStyle = '#0f172a';
-          dCtx.font = 'bold 18px sans-serif';
-          dCtx.fillText('株式会社 テクノロジー', 190, 180);
-          dCtx.font = '14px sans-serif';
-          dCtx.fillText('山田 太郎 様', 190, 220);
-          dCtx.fillStyle = '#64748b';
-          dCtx.fillText('代表取締役CEO', 190, 245);
+          // 背景（暗い卓上）
+          dCtx.fillStyle = '#1e293b';
+          dCtx.fillRect(0, 0, 640, 480);
+
+          demoProgress += 0.015;
+          const cycle = Math.sin(demoProgress); // 0〜1を往復
+
+          // サイクル後半で名刺が中央枠内に収まって静止するシミュレーション
+          if (cycle > 0.3) {
+            // 白い名刺を描画
+            dCtx.fillStyle = '#ffffff';
+            dCtx.shadowColor = 'rgba(0,0,0,0.5)';
+            dCtx.shadowBlur = 15;
+            dCtx.fillRect(160, 140, 320, 200);
+            
+            // 名刺上のテキストデザイン
+            dCtx.shadowBlur = 0;
+            dCtx.fillStyle = '#0f172a';
+            dCtx.font = 'bold 18px sans-serif';
+            dCtx.fillText('株式会社 テクノロジー', 190, 180);
+            dCtx.font = '14px sans-serif';
+            dCtx.fillText('山田 太郎 様', 190, 220);
+            dCtx.fillStyle = '#64748b';
+            dCtx.fillText('代表取締役CEO', 190, 245);
+          }
+
+          // 判定へ引き渡し
+          analyzeGuideFromCanvas(demoCanvas);
+      // 5. シャッター撮影処理 (確認用プレビュー表示)
+      function takePhoto() {
+        if (isCapturing) return;
+        isCapturing = true;
+
+        playShutterSound();
+
+        // 画面フラッシュエフェクト
+        const flash = document.createElement('div');
+        flash.className = 'fixed inset-0 bg-white z-50 transition-opacity duration-300';
+        document.body.appendChild(flash);
+        setTimeout(() => flash.style.opacity = '0', 50);
+        setTimeout(() => flash.remove(), 350);
+
+        statusMessage.textContent = '撮影完了！画像をご確認ください';
+
+        // カメラまたはデモ映像から画像キャプチャを生成
+        const saveCanvas = document.createElement('canvas');
+        const source = isDemoMode ? activeDemoCanvas : video;
+        
+        saveCanvas.width = source.videoWidth || source.width || 640;
+        saveCanvas.height = source.videoHeight || source.height || 480;
+        
+        const saveCtx = saveCanvas.getContext('2d');
+        saveCtx.drawImage(source, 0, 0, saveCanvas.width, saveCanvas.height);
+
+        // 画像データの抽出 (JPEG形式)
+        lastCapturedDataUrl = saveCanvas.toDataURL('image/jpeg', 0.92);
+
+        // ※いきなり保存はせず、確認プレビューモーダルを表示
+        setTimeout(() => {
+          showResultModal(lastCapturedDataUrl);
+        }, 300);
+      }
+
+      // ドライブ/ローカルへファイル出力（保存）
+      function saveImageToDrive(dataUrl) {
+        const dateStr = new Date().toISOString().replace(/[:.-]/g, "").slice(0, 15);
+        const fileName = `名刺_${dateStr}.jpg`;
+
+        // aタグを生成して自動クリックし、保存フォルダ（ドライブ）へ保存
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // ブラウザのローカルストレージにも最新履歴として保存
+        try {
+          localStorage.setItem('last_scanned_card', dataUrl);
+        } catch(e) {}
+      }
+
+      // 撮影完了確認モーダル表示
+      function showResultModal(dataUrl) {
+        const modal = document.getElementById('resultModal');
+        const previewImg = document.getElementById('previewImage');
+
+        previewImg.src = dataUrl;
+
+        modal.classList.remove('hidden');
+        setTimeout(() => {
+          modal.classList.remove('opacity-0');
+        }, 10);
+      }
+
+      // 「OK（保存する）」が押されたときの処理
+      function confirmAndSavePhoto() {
+        if (lastCapturedDataUrl) {
+          saveImageToDrive(lastCapturedDataUrl);
         }
-
-        // 判定へ引き渡し
-        analyzeGuideFromCanvas(demoCanvas);
-        requestAnimationFrame(renderDemo);
+        closeResultModal();
       }
 
-      requestAnimationFrame(renderDemo);
-    }
-
-    // 2. メイン解析ループ
-    function processVideoFrame() {
-      if (!isDemoMode && !isCapturing && video.readyState === video.HAVE_ENOUGH_DATA) {
-        analyzeGuideFromCanvas(video);
-      }
-      if (!isDemoMode) {
-        requestAnimationFrame(processVideoFrame);
-      }
-    }
-
-    // 3. 高速画像解析（ピクセル差分・明暗・エッジ）
-    function analyzeGuideFromCanvas(sourceElement) {
-      const sampleW = 160;
-      const sampleH = 120;
-      canvas.width = sampleW;
-      canvas.height = sampleH;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(sourceElement, 0, 0, sampleW, sampleH);
-
-      const roiW = Math.floor(sampleW * 0.8);
-      const roiH = Math.floor(sampleH * 0.45);
-      const roiX = Math.floor((sampleW - roiW) / 2);
-      const roiY = Math.floor((sampleH - roiH) / 2);
-
-      const imgData = ctx.getImageData(roiX, roiY, roiW, roiH);
-      const pixels = imgData.data;
-
-      let totalLuminance = 0;
-      let edgeScore = 0;
-      const pixelCount = roiW * roiH;
-
-      for (let i = 0; i < pixels.length; i += 4) {
-        const r = pixels[i];
-        const g = pixels[i + 1];
-        const b = pixels[i + 2];
-        const lum = (r * 0.299 + g * 0.587 + b * 0.114);
-        totalLuminance += lum;
-
-        if (i + 4 < pixels.length) {
-          const nextLum = (pixels[i + 4] * 0.299 + pixels[i + 5] * 0.587 + pixels[i + 6] * 0.114);
-          edgeScore += Math.abs(lum - nextLum);
-        }
+      // 「撮り直す」が押されたときの処理
+      function retakePhoto() {
+        closeResultModal();
       }
 
-      const avgLuminance = totalLuminance / pixelCount;
-      const avgEdge = edgeScore / pixelCount;
-
-      let frameDifference = 999;
-      if (lastFrameData) {
-        let diffSum = 0;
-        for (let i = 0; i < pixels.length; i += 16) {
-          diffSum += Math.abs(pixels[i] - lastFrameData[i]);
-        }
-        frameDifference = diffSum / (pixels.length / 16);
+      // モーダルを閉じて次の受付・撮影待機へ
+      function closeResultModal() {
+        const modal = document.getElementById('resultModal');
+        modal.classList.add('opacity-0');
+        setTimeout(() => {
+          modal.classList.add('hidden');
+          isCapturing = false;
+          holdStartTime = null;
+          countdownOverlay.classList.add('opacity-0');
+          statusMessage.textContent = isDemoMode ? '【デモモード】名刺が近づいて自動撮影されます' : '名刺を枠内にかざしてください';
+          statusMessage.className = "text-sm text-slate-400 mt-1";
+        }, 300);
       }
-      lastFrameData = pixels;
 
-      const hasObjectInGuide = (avgLuminance > 50 && avgEdge > 10);
-      const isStable = (frameDifference < 15);
-
-      handleDetectionResult(hasObjectInGuide && isStable);
-    }
-
-    // 4. 自動シャッター & UI連動
-    function handleDetectionResult(isCardDetectedAndStill) {
-      if (isCardDetectedAndStill) {
-        guideBox.classList.remove('border-slate-400/80');
-        guideBox.classList.add('border-emerald-400', 'shadow-[0_0_25px_rgba(16,185,129,0.6)]');
-        scanLine.classList.remove('hidden');
-        statusMessage.textContent = 'そのまま動かさないでください...';
-        statusMessage.className = "text-sm text-emerald-400 font-semibold mt-1 animate-pulse";
-
-        if (!holdStartTime) holdStartTime = Date.now();
-        const elapsedTime = Date.now() - holdStartTime;
-        const progress = Math.min(elapsedTime / HOLD_DURATION_MS, 1);
-
-        countdownOverlay.classList.remove('opacity-0');
-        const offset = CIRCLE_CIRCUMFERENCE - (progress * CIRCLE_CIRCUMFERENCE);
-        progressCircle.style.strokeDashoffset = offset;
-
-        if (elapsedTime >= HOLD_DURATION_MS) {
-          takePhoto();
-        }
-      } else {
-        holdStartTime = null;
-        guideBox.classList.remove('border-emerald-400', 'shadow-[0_0_25px_rgba(16,185,129,0.6)]');
-        guideBox.classList.add('border-slate-400/80');
-        scanLine.classList.add('hidden');
-        countdownOverlay.classList.add('opacity-0');
-        statusMessage.textContent = isDemoMode ? '【デモモード】名刺が近づいて自動撮影されます' : '名刺を枠内にかざしてください';
-        statusMessage.className = "text-sm text-slate-400 mt-1";
+      function playShutterSound() {
+        try {
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(220, audioCtx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.08);
+        } catch (e) {}
       }
-    }
 
-    // 5. シャッター撮影
-    function takePhoto() {
-      if (isCapturing) return;
-      isCapturing = true;
-
-      playShutterSound();
-
-      const flash = document.createElement('div');
-      flash.className = 'fixed inset-0 bg-white z-50 transition-opacity duration-300';
-      document.body.appendChild(flash);
-      setTimeout(() => flash.style.opacity = '0', 50);
-      setTimeout(() => flash.remove(), 350);
-
-      statusMessage.textContent = '名刺を自動撮影しました！';
-
-      setTimeout(() => {
-        alert('名刺の自動撮影が完了しました！受付を開始します。');
-        isCapturing = false;
-        holdStartTime = null;
-        countdownOverlay.classList.add('opacity-0');
-      }, 600);
-    }
-
-    function playShutterSound() {
-      try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(220, audioCtx.currentTime + 0.08);
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.08);
-      } catch (e) {}
-    }
-
-    window.onload = initCamera;
-  </script>
+      window.onload = initCamera;
+    </script>
 </body>
 </html>
