@@ -5,8 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>来客受付</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- OpenCV.js for real-time card edge detection -->
-  <script async src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.9.0-release.3/opencv.js" onload="onOpenCvReady()"></script>
+  <!-- Global Module declaration for OpenCV initialization -->
+  <script>
+    var Module = {
+      onRuntimeInitialized: function() {
+        if (window.onOpenCvReady) {
+          window.onOpenCvReady();
+        } else {
+          window.cvReadyPending = true;
+        }
+      }
+    };
+  </script>
+  <!-- OpenCV.js with reliable CDN source -->
+  <script async src="https://docs.opencv.org/4.9.0/opencv.js"></script>
   <style>
     /* Guide Overlay Line Animations */
     .scan-line {
@@ -76,9 +88,12 @@
     </div>
 
     <!-- OpenCV Loading Spinner -->
-    <div id="cvLoading" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center gap-3">
-      <div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-      <p class="text-sm text-slate-300">カメラ検出エンジン起動中...</p>
+    <div id="cvLoading" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center gap-3 p-4 text-center z-10">
+      <div id="cvSpinner" class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <p id="cvLoadingText" class="text-sm text-slate-300">カメラ検出エンジン起動中...</p>
+      <button id="fallbackBtn" onclick="enableFallbackMode()" class="hidden mt-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-xs text-slate-200 rounded-lg border border-slate-500">
+        エンジンをスキップして手動撮影で利用する
+      </button>
     </div>
   </main>
 
@@ -105,14 +120,46 @@
     const countdownOverlay = document.getElementById('countdownOverlay');
     const progressCircle = document.getElementById('progressCircle');
     const cvLoading = document.getElementById('cvLoading');
+    const cvLoadingText = document.getElementById('cvLoadingText');
+    const fallbackBtn = document.getElementById('fallbackBtn');
 
     let cvReady = false;
     let isCapturing = false;
     let holdStartTime = null;
+    let cvTimeoutTimer = null;
     const HOLD_DURATION_MS = 1200; // 枠内で静止したとみなす時間(ミリ秒)
     const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * 48;
 
-    // 1. Initialize Camera
+    // 1. OpenCV Ready Callback
+    window.onOpenCvReady = function() {
+      if (cvReady) return;
+      cvReady = true;
+      if (cvTimeoutTimer) clearTimeout(cvTimeoutTimer);
+      cvLoading.classList.add('hidden');
+      statusMessage.textContent = '名刺を画面中央の枠内にかざしてください';
+    };
+
+    // Check if OpenCV loaded before script execution
+    if (window.cvReadyPending) {
+      window.onOpenCvReady();
+    }
+
+    // 8-second Timeout fallback if OpenCV fails to load (e.g. slow network)
+    cvTimeoutTimer = setTimeout(() => {
+      if (!cvReady) {
+        cvLoadingText.textContent = '検出エンジンの読み込みに時間がかかっています。';
+        cvLoadingText.classList.add('text-amber-400');
+        fallbackBtn.classList.remove('hidden');
+      }
+    }, 8000);
+
+    function enableFallbackMode() {
+      cvLoading.classList.add('hidden');
+      statusMessage.textContent = '手動撮影モードで受付を行ってください';
+      statusMessage.className = "text-sm text-amber-400 font-semibold mt-1";
+    }
+
+    // 2. Initialize Camera
     async function initCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -129,13 +176,6 @@
       }
     }
 
-    // 2. OpenCV Ready Callback
-    function onOpenCvReady() {
-      cvReady = true;
-      cvLoading.classList.add('hidden');
-      statusMessage.textContent = '名刺を画面中央の枠内にかざしてください';
-    }
-
     // 3. Main Auto-Detection Loop
     function processVideoFrame() {
       if (!isCapturing && cvReady && video.readyState === video.HAVE_ENOUGH_DATA) {
@@ -148,7 +188,7 @@
     function detectCardInGuide() {
       const vWidth = video.videoWidth;
       const vHeight = video.videoHeight;
-      if (vWidth === 0 || vHeight === 0) return;
+      if (vWidth === 0 || vHeight === 0 || !window.cv) return;
 
       canvas.width = vWidth;
       canvas.height = vHeight;
@@ -187,13 +227,11 @@
           let cnt = contours.get(i);
           let area = cv.contourArea(cnt);
           
-          // Check if contour occupies at least 35% of guide box area
           if (area > roiArea * 0.35) {
             let peri = cv.arcLength(cnt, true);
             let approx = new cv.Mat();
             cv.approxPolyDP(cnt, approx, 0.04 * peri, true);
 
-            // Card typically has 4 corner vertices
             if (approx.rows === 4) {
               cardFound = true;
               approx.delete();
@@ -217,29 +255,24 @@
     // 5. Detection Feedback & Auto Trigger
     function handleDetectionResult(found) {
       if (found) {
-        // UI feedback when detected
         guideBox.classList.remove('border-slate-400/80');
         guideBox.classList.add('border-emerald-400', 'shadow-[0_0_20px_rgba(52,211,153,0.5)]');
         scanLine.classList.remove('hidden');
         statusMessage.textContent = '名刺を固定してください...';
         statusMessage.className = "text-sm text-emerald-400 font-semibold mt-1";
 
-        // Progress timer
         if (!holdStartTime) holdStartTime = Date.now();
         const elapsedTime = Date.now() - holdStartTime;
         const progress = Math.min(elapsedTime / HOLD_DURATION_MS, 1);
 
-        // Countdown visual update
         countdownOverlay.classList.remove('opacity-0');
         const offset = CIRCLE_CIRCUMFERENCE - (progress * CIRCLE_CIRCUMFERENCE);
         progressCircle.style.strokeDashoffset = offset;
 
-        // Trigger Auto-Capture
         if (elapsedTime >= HOLD_DURATION_MS) {
           takePhoto();
         }
       } else {
-        // Reset when card is lost or unstable
         holdStartTime = null;
         guideBox.classList.remove('border-emerald-400', 'shadow-[0_0_20px_rgba(52,211,153,0.5)]');
         guideBox.classList.add('border-slate-400/80');
@@ -255,17 +288,14 @@
       if (isCapturing) return;
       isCapturing = true;
 
-      // Play shutter sound via Web Audio API
       playShutterSound();
 
-      // Flash Effect
       const flash = document.createElement('div');
       flash.className = 'fixed inset-0 bg-white z-50 transition-opacity duration-300';
       document.body.appendChild(flash);
       setTimeout(() => flash.style.opacity = '0', 50);
       setTimeout(() => flash.remove(), 350);
 
-      // Final Capture from video stream
       const finalCanvas = document.createElement('canvas');
       finalCanvas.width = video.videoWidth;
       finalCanvas.height = video.videoHeight;
@@ -276,17 +306,14 @@
 
       statusMessage.textContent = '受付データを送信中...';
 
-      // Send base64Image to Google Apps Script (doPost)
       setTimeout(() => {
         alert('名刺の撮影が完了しました！受付を行いました。');
-        // Reset for next visitor
         isCapturing = false;
         holdStartTime = null;
         countdownOverlay.classList.add('opacity-0');
       }, 800);
     }
 
-    // Simple Synthesizer Shutter Sound Effect
     function playShutterSound() {
       try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -304,7 +331,6 @@
       } catch (e) {}
     }
 
-    // Start system on page load
     window.onload = initCamera;
   </script>
 </body>
