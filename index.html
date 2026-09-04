@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>受付画面</title>
+  <title>受付名刺スキャナー</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -35,7 +35,7 @@
 
   <!-- ヘッダー -->
   <header class="w-full max-w-lg text-center pt-2 pb-3 relative">
-    <button onclick="openConfigModal()" class="absolute right-0 top-2 p-2 text-slate-400 hover:text-white bg-slate-900 border border-slate-800 rounded-xl transition flex items-center gap-1 text-xs" title="Googleドライブ連携設定">
+    <button onclick="openConfigModal()" class="absolute right-0 top-2 p-2 text-slate-400 hover:text-white bg-slate-900 border border-slate-800 rounded-xl transition flex items-center gap-1 text-xs" title="連携設定">
       <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
       設定
     </button>
@@ -48,7 +48,7 @@
   </header>
 
   <!-- メインコンテンツ (カメラビュー＆ガイド枠) -->
-  <main class="w-full max-w-lg relative flex flex-col items-center">
+  <main class="w-full max-w-lg relative flex flex-col items-center my-auto">
     
     <!-- ビューポート・カメラ枠 -->
     <div id="cameraContainer" class="relative w-full aspect-[4/3] bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex items-center justify-center">
@@ -56,76 +56,83 @@
       <!-- 生カメラ映像 -->
       <video id="video" class="w-full h-full object-cover" autoplay playsinline muted></video>
 
+      <!-- ガイド枠 Overlay -->
+      <div id="guideFrame" class="absolute inset-8 border-2 border-blue-500/60 rounded-xl guide-pulse pointer-events-none flex items-center justify-center transition-all duration-300">
+        <!-- コーナーアクセント -->
+        <div class="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-blue-400 rounded-tl-sm"></div>
+        <div class="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-blue-400 rounded-tr-sm"></div>
+        <div class="absolute -bottom-1 -left-1 w-4 h-4 border-b-4 border-l-4 border-blue-400 rounded-bl-sm"></div>
+        <div class="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-blue-400 rounded-br-sm"></div>
+
+        <!-- 円形カウントダウンメーター -->
+        <div id="countdownOverlay" class="opacity-0 transition-opacity duration-200 flex flex-col items-center gap-1 bg-slate-950/70 p-3 rounded-full backdrop-blur-sm">
+          <svg class="w-16 h-16">
+            <circle class="text-slate-700" stroke-width="4" stroke="currentColor" fill="transparent" r="28" cx="32" cy="32"/>
+            <circle id="progressCircle" class="text-emerald-400 progress-ring__circle" stroke-width="4" stroke-dasharray="175.9" stroke-dashoffset="175.9" stroke-linecap="round" stroke="currentColor" fill="transparent" r="28" cx="32" cy="32"/>
+          </svg>
+        </div>
+      </div>
+
       <!-- カメラ未ロード時の読み込み表示 / エラーメッセージ -->
       <div id="cameraLoading" class="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center gap-3 p-6 text-center z-10">
         <div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
         <p class="text-sm text-slate-300 font-medium">カメラを起動中...</p>
         <button onclick="startDemoMode()" class="mt-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-blue-400 rounded-lg border border-slate-700 transition">
+          デモモードでテスト動作する
+        </button>
+      </div>
+
+      <!-- 非表示の分析用Canvas -->
+      <canvas id="analysisCanvas" class="hidden"></canvas>
+    </div>
+  </main>
+
+  <footer class="w-full max-w-lg text-center py-4 text-xs text-slate-500">
+    受付システム &copy; 名刺自動認識
+  </footer>
+
+  <!-- プレビュー＆確認モーダル -->
+  <div id="resultModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50 hidden opacity-0 transition-opacity duration-300">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 text-center shadow-2xl flex flex-col items-center">
+      <h3 class="text-base font-bold text-white mb-2">撮影結果の確認</h3>
+      <p class="text-xs text-slate-400 mb-4">名刺が綺麗に読み取れているかご確認ください</p>
+
+      <div class="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-950 border border-slate-800 mb-4 flex items-center justify-center">
+        <img id="previewImage" class="w-full h-full object-contain" src="" alt="名刺プレビュー">
+      </div>
+
       <div class="w-full flex gap-2" id="modalButtons">
         <button onclick="retakePhoto()" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-xl text-slate-200 border border-slate-600 transition flex items-center justify-center gap-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           撮り直す
         </button>
         <button id="saveBtn" onclick="confirmAndSavePhoto()" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-xs font-bold rounded-xl text-white shadow-lg transition flex items-center justify-center gap-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-          Driveに送信
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+          保存
         </button>
       </div>
       <div id="uploadStatus" class="mt-3 text-xs font-medium text-slate-300 hidden"></div>
     </div>
   </div>
 
-  <!-- Googleドライブ設定モーダル -->
+  <!-- 連携設定モーダル -->
   <div id="configModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50 hidden opacity-0 transition-opacity duration-300">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 text-left shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-3">
         <h3 class="text-base font-bold text-white flex items-center gap-2">
           <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4 0-2.05 1.53-3.76 3.56-3.97l1.07-.11.5-.95C8.08 7.14 9.94 6 12 6c2.62 0 4.88 1.86 5.39 4.43l.3 1.5 1.53.11c1.56.1 2.78 1.41 2.78 2.96 0 1.65-1.35 3-3 3z"/></svg>
-          Googleドライブ設定
+          送信先エンドポイント設定
         </h3>
         <button onclick="closeConfigModal()" class="text-slate-400 hover:text-white p-1">✕</button>
       </div>
 
       <p class="text-xs text-slate-300 mb-3">
-        Google Apps Script (GAS) のWeb App URLを設定すると、名刺画像がGoogleドライブに直接アップロードされます。
+        Web App URL（GASなど）を設定すると、名刺画像がサーバーに自動送信されます。未設定の場合は端末ローカルへ保存されます。
       </p>
 
       <div class="mb-4">
-        <label class="block text-xs font-semibold text-slate-300 mb-1">GAS Web App URL</label>
+        <label class="block text-xs font-semibold text-slate-300 mb-1">Web App URL</label>
         <input type="text" id="gasUrlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-blue-500">
-      </div>
-
-      <!-- GAS スクリプトコピーエリア -->
-      <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 mb-4">
-        <div class="flex justify-between items-center mb-1.5">
-          <span class="text-[11px] font-bold text-slate-400">作成手順 & GASコード</span>
-          <button onclick="copyGasCode()" class="text-[10px] bg-slate-800 hover:bg-slate-700 text-blue-400 px-2 py-1 rounded border border-slate-700">コードをコピー</button>
-        </div>
-        <ol class="text-[11px] text-slate-400 list-decimal list-inside space-y-1 mb-2">
-          <li>Googleドライブで「新規」→「その他」→「Google Apps Script」を開く</li>
-          <li>以下のコードを貼り付けて保存する</li>
-          <li>「デプロイ」→「新しいデプロイ」でアクセスできるユーザーを「全員」にしてデプロイする</li>
-          <li>発行されたWeb App URLを上の入力欄に貼り付ける</li>
-        </ol>
-        <pre id="gasCodeText" class="bg-slate-900 p-2 rounded text-[10px] text-emerald-400 overflow-x-auto border border-slate-800">
-function doPost(e) {
-  try {
-    var data = JSON.parse(e.postData.contents);
-    var base64Data = data.image.replace(/^data:image\/(png|jpeg);base64,/, "");
-    var blob = Utilities.newBlob(Utilities.base64Decode(base64Data), 'image/jpeg', data.fileName);
-    
-    // 特定のフォルダIDを指定（空の場合はマイドライブ直下）
-    var folderId = ""; 
-    var folder = folderId ? DriveApp.getFolderById(folderId) : DriveApp.getRootFolder();
-    var file = folder.createFile(blob);
-    
-    return ContentService.createTextOutput(JSON.stringify({result: "success", url: file.getUrl()}))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch(err) {
-    return ContentService.createTextOutput(JSON.stringify({result: "error", error: err.toString()}))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}</pre>
       </div>
 
       <div class="flex gap-2">
@@ -159,47 +166,56 @@ function doPost(e) {
     const HOLD_DURATION_MS = 1000; // 1秒間静止で自動撮影
     const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * 28; // プログレスリングの円周 (r=28)
 
-    // 1. カメラ初期化 (柔軟なフォールバック付き)
+    // 1. カメラ初期化 (フォールバック強化)
     async function initCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showCameraError("お使いのブラウザはカメラアクセスに対応していません。");
+        return;
+      }
+
       try {
         const constraints = {
           video: {
-            facingMode: { ideal: 'environment' }, // リアカメラを推奨するが強制はしない
+            facingMode: { ideal: 'environment' },
             width: { ideal: 1280 },
             height: { ideal: 720 }
           }
         };
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = stream;
-        video.onloadedmetadata = () => {
-          cameraLoading.classList.add('hidden');
-          requestAnimationFrame(processFrame);
-        };
+        handleStreamSuccess(stream);
       } catch (err) {
-        console.warn('指定条件でのカメラ取得失敗。標準カメラで再試行します:', err);
+        console.warn('環境カメラでの取得失敗。標準カメラで再試行します:', err);
         try {
-          // エラー時: 任意のカメラでフォールバック試行
           const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
-          video.srcObject = fallbackStream;
-          video.onloadedmetadata = () => {
-            cameraLoading.classList.add('hidden');
-            requestAnimationFrame(processFrame);
-          };
+          handleStreamSuccess(fallbackStream);
         } catch (fallbackErr) {
-          console.error('カメラを読み込めませんでした:', fallbackErr);
-          cameraLoading.innerHTML = `
-            <p class="text-xs text-rose-400 font-semibold mb-2">カメラを起動できませんでした</p>
-            <p class="text-[11px] text-slate-400 mb-3">ブラウザのカメラ許可をご確認ください</p>
-            <button onclick="startDemoMode()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white rounded-lg shadow-md transition">
-              デモモードで動作を確認する
-            </button>
-          `;
+          console.error('カメラ起動エラー:', fallbackErr);
+          showCameraError("カメラを起動できませんでした。ブラウザの権限設定をご確認ください。");
         }
       }
     }
 
-    // 2. デモモード起動 (カメラが使えないPC/環境用シミュレーション)
+    function handleStreamSuccess(stream) {
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        cameraLoading.classList.add('hidden');
+        video.play();
+        requestAnimationFrame(processFrame);
+      };
+    }
+
+    function showCameraError(message) {
+      cameraLoading.innerHTML = `
+        <p class="text-xs text-rose-400 font-semibold mb-1">カメラを起動できませんでした</p>
+        <p class="text-[11px] text-slate-400 mb-3">${message}</p>
+        <button onclick="startDemoMode()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white rounded-lg shadow-md transition">
+          デモモードで動作を確認する
+        </button>
+      `;
+    }
+
+    // 2. デモモード起動
     function startDemoMode() {
       isDemoMode = true;
       cameraLoading.classList.add('hidden');
@@ -247,7 +263,7 @@ function doPost(e) {
       renderDemo();
     }
 
-    // 3. メイン分析ループ (映像フレームの解析)
+    // 3. メイン分析ループ
     function processFrame() {
       if (isCapturing || isDemoMode) {
         if (!isDemoMode) requestAnimationFrame(processFrame);
@@ -270,7 +286,6 @@ function doPost(e) {
 
       ctx.drawImage(source, 0, 0, width, height);
 
-      // ガイド枠に対応する中央領域 (約 60% x 40%) のピクセル抽出
       const rectX = Math.floor(width * 0.2);
       const rectY = Math.floor(height * 0.3);
       const rectW = Math.floor(width * 0.6);
@@ -283,15 +298,13 @@ function doPost(e) {
       let totalPixels = rectW * rectH;
       let currentFrameSummary = 0;
 
-      // 名刺の「白さ」とエッジの変化量を計算
-      for (let i = 0; i < data.length; i += 16) { // 高速化のためサンプリング
+      for (let i = 0; i < data.length; i += 16) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
         
-        // 輝度算出
         const brightness = (r + g + b) / 3;
-        if (brightness > 130) { // 白っぽいピクセル
+        if (brightness > 130) {
           whitePixelCount++;
         }
         currentFrameSummary += brightness;
@@ -299,16 +312,12 @@ function doPost(e) {
 
       const whiteRatio = whitePixelCount / (totalPixels / 4);
 
-      // 前フレームとの差分（手ぶれ・移動の検出）
       let movement = 999;
       if (lastFrameData !== null) {
         movement = Math.abs(currentFrameSummary - lastFrameData) / (totalPixels / 4);
       }
       lastFrameData = currentFrameSummary;
 
-      // 【判定ロジック】
-      // 1. 枠内に十分な明るさ（白い紙＝名刺）が存在すること (whiteRatio > 0.35)
-      // 2. 前フレームからの動き（ブレ）が小さいこと (movement < 8.0)
       const isCardDetected = whiteRatio > 0.35;
       const isStable = movement < 8.0;
 
@@ -319,7 +328,7 @@ function doPost(e) {
       }
     }
 
-    // 枠内に名刺が正しく収まり静止している時
+    // 枠内に名刺が収まり静止している時
     function onCardDetectedAndStable() {
       const now = Date.now();
       if (!holdStartTime) {
@@ -329,7 +338,6 @@ function doPost(e) {
       const elapsedTime = now - holdStartTime;
       const progress = Math.min(elapsedTime / HOLD_DURATION_MS, 1.0);
 
-      // UI更新 (グリーン発光＆プログレスメーター進行)
       guideFrame.classList.add('guide-success');
       countdownOverlay.classList.remove('opacity-0');
       
@@ -339,7 +347,6 @@ function doPost(e) {
       statusMessage.textContent = 'そのまま動かさないでください...';
       statusMessage.className = 'text-sm text-emerald-400 font-semibold mt-1 animate-pulse';
 
-      // 1秒間静止で自動シャッター実行
       if (elapsedTime >= HOLD_DURATION_MS && !isCapturing) {
         takePhoto();
       }
@@ -358,7 +365,7 @@ function doPost(e) {
       }
     }
 
-    // 5. シャッター撮影処理
+    // 5. 撮影処理
     function takePhoto() {
       if (isCapturing) return;
       isCapturing = true;
@@ -374,7 +381,6 @@ function doPost(e) {
 
       statusMessage.textContent = '撮影完了！画像をご確認ください';
 
-      // 画像の切り出し/キャプチャ
       const saveCanvas = document.createElement('canvas');
       const source = isDemoMode ? activeDemoCanvas : video;
       
@@ -386,13 +392,11 @@ function doPost(e) {
 
       lastCapturedDataUrl = saveCanvas.toDataURL('image/jpeg', 0.92);
 
-      // モーダル表示（確認画面）
       setTimeout(() => {
         showResultModal(lastCapturedDataUrl);
       }, 300);
     }
 
-    // モーダル表示
     function showResultModal(dataUrl) {
       const modal = document.getElementById('resultModal');
       const previewImg = document.getElementById('previewImage');
@@ -411,30 +415,25 @@ function doPost(e) {
       }, 10);
     }
 
-    // 「OK（保存する / Driveに送信）」が押された時
+    // 保存実行処理
     async function confirmAndSavePhoto() {
       if (!lastCapturedDataUrl) return;
 
       const saveBtn = document.getElementById('saveBtn');
       const uploadStatus = document.getElementById('uploadStatus');
 
-      // GAS URLが設定されていない場合は設定画面を案内してローカル保存にフォールバック
+      // Web App URLが設定されていない場合はローカル保存
       if (!gasWebAppUrl) {
-        if (confirm("Googleドライブ連携用URLが未設定です。\n設定画面を開きますか？\n（キャンセルを選ぶとスマホ本体に保存されます）")) {
-          openConfigModal();
-        } else {
-          saveImageLocally(lastCapturedDataUrl);
-          closeResultModal();
-        }
+        saveImageLocally(lastCapturedDataUrl);
+        closeResultModal();
         return;
       }
 
-      // アップロード実行UIの表示
       saveBtn.disabled = true;
       saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
       uploadStatus.classList.remove('hidden');
       uploadStatus.className = "mt-3 text-xs font-medium text-blue-400 animate-pulse";
-      uploadStatus.textContent = "Googleドライブに送信中...";
+      uploadStatus.textContent = "保存中...";
 
       try {
         const dateStr = new Date().toISOString().replace(/[:.-]/g, "").slice(0, 15);
@@ -442,7 +441,7 @@ function doPost(e) {
 
         const response = await fetch(gasWebAppUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain' }, // CORS回避用
+          headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({
             image: lastCapturedDataUrl,
             fileName: fileName
@@ -452,23 +451,24 @@ function doPost(e) {
         const result = await response.json();
         if (result.result === 'success') {
           uploadStatus.className = "mt-3 text-xs font-semibold text-emerald-400";
-          uploadStatus.textContent = "✓ Googleドライブに保存しました！";
+          uploadStatus.textContent = "✓ 保存しました！";
           setTimeout(() => {
             closeResultModal();
-          }, 1500);
+          }, 1200);
         } else {
           throw new Error(result.error || '送信エラー');
         }
       } catch (err) {
-        console.error('Google Drive Upload Error:', err);
+        console.error('Save Error:', err);
         uploadStatus.className = "mt-3 text-xs font-semibold text-rose-400";
-        uploadStatus.textContent = "アップロードに失敗しました。URLをご確認ください。";
-        saveBtn.disabled = false;
-        saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        uploadStatus.textContent = "送信に失敗しました。ローカル保存します。";
+        setTimeout(() => {
+          saveImageLocally(lastCapturedDataUrl);
+          closeResultModal();
+        }, 1000);
       }
     }
 
-    // ローカル保存フォールバック
     function saveImageLocally(dataUrl) {
       const dateStr = new Date().toISOString().replace(/[:.-]/g, "").slice(0, 15);
       const fileName = `名刺_${dateStr}.jpg`;
@@ -481,7 +481,7 @@ function doPost(e) {
       document.body.removeChild(link);
     }
 
-    // 設定モーダルの開閉
+    // 設定モーダル
     function openConfigModal() {
       const modal = document.getElementById('configModal');
       document.getElementById('gasUrlInput').value = gasWebAppUrl;
@@ -499,42 +499,13 @@ function doPost(e) {
       const url = document.getElementById('gasUrlInput').value.trim();
       gasWebAppUrl = url;
       localStorage.setItem('gas_web_app_url', url);
-      alert('Googleドライブ設定を保存しました');
       closeConfigModal();
     }
 
-    function copyGasCode() {
-      const code = document.getElementById('gasCodeText').innerText;
-      navigator.clipboard.writeText(code).then(() => {
-        alert('GASコードをクリップボードにコピーしました');
-      }).catch(() => {
-        document.execCommand('copy');
-      });
-    }
-
-    // 「撮り直す」が押された時
     function retakePhoto() {
       closeResultModal();
     }
 
-    // 保存処理 (自動ダウンロード)
-    function saveImageToDrive(dataUrl) {
-      const dateStr = new Date().toISOString().replace(/[:.-]/g, "").slice(0, 15);
-      const fileName = `名刺_${dateStr}.jpg`;
-
-      const link = document.createElement('a');
-      link.href = dataUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      try {
-        localStorage.setItem('last_scanned_card', dataUrl);
-      } catch(e) {}
-    }
-
-    // モーダルを閉じて撮影待機状態に復帰
     function closeResultModal() {
       const modal = document.getElementById('resultModal');
       modal.classList.add('opacity-0');
@@ -548,7 +519,7 @@ function doPost(e) {
       }, 300);
     }
 
-    // 効果音 (シャッター音)
+    // シャッター効果音
     function playShutterSound() {
       try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
