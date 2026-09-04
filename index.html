@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>来校者受付</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9f9f9; color: #333; text-align: center; margin: 0; padding: 20px; }
+    .container { max-width: 500px; margin: 0 auto; background: #fff; padding: 30px 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    h1 { font-size: 22px; margin-bottom: 30px; color: #2c3e50; }
+    
+    /* 画面切り替え用 */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ボタン */
+    .btn { display: block; width: 100%; padding: 18px; margin-bottom: 15px; font-size: 18px; font-weight: bold; color: #fff; background: #3498db; border: none; border-radius: 8px; cursor: pointer; text-decoration: none; box-sizing: border-box; }
+    .btn-secondary { background: #95a5a6; }
+    .btn-success { background: #2ecc71; }
+    .btn:active { opacity: 0.8; }
+
+    /* カメラとプレビュー */
+    #videoArea { width: 100%; max-width: 400px; border-radius: 8px; margin-bottom: 20px; background: #000; }
+    #previewImg { width: 100%; max-width: 400px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; }
+    
+    /* 受付完了画面 */
+    .receipt-box { background: #e8f8f5; border: 2px dashed #1abc9c; padding: 20px; border-radius: 8px; margin: 20px 0; }
+    .receipt-number { font-size: 32px; font-weight: bold; color: #16a085; letter-spacing: 2px; margin: 10px 0; }
+    
+    .loading { font-size: 18px; color: #e67e22; font-weight: bold; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  
+  <!-- 1. トップ画面 -->
+  <div id="view-home" class="view active">
+    <h1>来校受付</h1>
+    <p style="margin-bottom: 30px; font-size: 16px;">名刺をお持ちですか？</p>
+    <button class="btn" onclick="startCamera()">名刺をスキャンする</button>
+    <button class="btn btn-secondary" onclick="alert('今回は名刺による受付のみ稼働しています。')">名刺をお持ちでない方はこちら</button>
+  </div>
+
+  <!-- 2. カメラ撮影画面 -->
+  <div id="view-camera" class="view">
+    <h1>名刺を撮影してください</h1>
+    <!-- iOS対応のため playsinline が必須 -->
+    <video id="videoArea" autoplay playsinline></video>
+    <button class="btn" onclick="takePhoto()">撮影する</button>
+    <button class="btn btn-secondary" onclick="showView('view-home'); stopCamera();">戻る</button>
+  </div>
+
+  <!-- 3. 確認画面 -->
+  <div id="view-preview" class="view">
+    <h1>この画像で受付しますか？</h1>
+    <img id="previewImg" src="" alt="プレビュー">
+    <div id="loadingMsg" class="loading" style="display: none;">送信中...そのままお待ちください</div>
+    <div id="actionButtons">
+      <button class="btn btn-success" onclick="submitData()">受付する</button>
+      <button class="btn btn-secondary" onclick="retakePhoto()">撮り直す</button>
+    </div>
+  </div>
+
+  <!-- 4. 完了画面 -->
+  <div id="view-success" class="view">
+    <h1>受付完了</h1>
+    <p>以下の番号で受付いたしました。</p>
+    <div class="receipt-box">
+      <div>受付番号</div>
+      <div class="receipt-number" id="displayReceipt">000000</div>
+    </div>
+    <p>ありがとうございました。<br>担当者が参りますのでお待ちください。</p>
+    <button class="btn" style="margin-top:20px;" onclick="location.reload()">最初の画面に戻る</button>
+  </div>
+
+</div>
+
+<!-- 画像処理用（非表示） -->
+<canvas id="canvas" style="display:none;"></canvas>
+
+<script>
+  // ==========================================
+  // 【重要】GASの「WebアプリのURL」をここに貼り付けます
+  // ==========================================
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxTtiZZ4L9VLX_fm8bWv7Cgq0tZsaoibVRcit6H_uN5JC1YoM1FPnGOm-gCgI14OyB8wA/exec";
+  
+  let videoStream = null;
+  let capturedBase64 = "";
+
+  // 画面切り替え制御
+  function showView(viewId) {
+    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+    document.getElementById(viewId).classList.add('active');
+  }
+
+  // カメラ起動
+  async function startCamera() {
+    showView('view-camera');
+    const video = document.getElementById('videoArea');
+    try {
+      // 背面カメラを優先
+      const constraints = { video: { facingMode: "environment" } };
+      videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = videoStream;
+    } catch (err) {
+      alert("カメラの起動に失敗しました。ブラウザのカメラ許可設定をご確認ください。");
+      showView('view-home');
+    }
+  }
+
+  // カメラ停止
+  function stopCamera() {
+    if (videoStream) {
+      videoStream.getTracks().forEach(track => track.stop());
+      videoStream = null;
+    }
+  }
+
+  // 撮影処理
+  function takePhoto() {
+    const video = document.getElementById('videoArea');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // 画像サイズを最大1024pxに抑える（送信速度向上とGASの制限回避のため）
+    const MAX_WIDTH = 1024;
+    let width = video.videoWidth;
+    let height = video.videoHeight;
+    
+    if (width > MAX_WIDTH) {
+      height = Math.floor(height * (MAX_WIDTH / width));
+      width = MAX_WIDTH;
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+    ctx.drawImage(video, 0, 0, width, height);
+
+    // JPEG形式で圧縮率0.7でBase64化
+    capturedBase64 = canvas.toDataURL("image/jpeg", 0.7);
+    
+    document.getElementById('previewImg').src = capturedBase64;
+    stopCamera();
+    showView('view-preview');
+  }
+
+  // 撮り直し
+  function retakePhoto() {
+    capturedBase64 = "";
+    startCamera();
+  }
+
+  // GASへデータ送信
+  async function submitData() {
+    if (!capturedBase64) return;
+    
+    document.getElementById('actionButtons').style.display = 'none';
+    document.getElementById('loadingMsg').style.display = 'block';
+
+    try {
+      // CORS対策として fetch の挙動を調整。
+      // content-typeを text/plain にすることでプリフライト(OPTIONS)リクエストを回避し、GASへ送信可能にする。
+      const response = await fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify({ image: capturedBase64 }),
+        headers: {
+          "Content-Type": "text/plain" 
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        document.getElementById('displayReceipt').innerText = result.receiptNumber;
+        showView('view-success');
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      alert("通信エラーが発生しました: " + error.message);
+      // エラー時はボタンを復活させる
+      document.getElementById('actionButtons').style.display = 'block';
+      document.getElementById('loadingMsg').style.display = 'none';
+    }
+  }
+</script>
+
+</body>
+</html>
