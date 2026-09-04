@@ -75,8 +75,13 @@
 
     <!-- Initializing Camera Overlay -->
     <div id="cameraLoading" class="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center gap-3 p-4 text-center z-10">
-      <div class="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-      <p class="text-sm text-slate-300">カメラを起動しています...</p>
+      <div id="loadingSpinner" class="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+      <p id="loadingStatusText" class="text-sm text-slate-300">カメラを起動しています...</p>
+      
+      <!-- Demo / Retry Fallback Button -->
+      <button id="demoBtn" onclick="startDemoMode()" class="hidden mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg transition shadow-md">
+        デモモードで動作確認する（カメラ不要）
+      </button>
     </div>
   </main>
 
@@ -103,54 +108,133 @@
     const countdownOverlay = document.getElementById('countdownOverlay');
     const progressCircle = document.getElementById('progressCircle');
     const cameraLoading = document.getElementById('cameraLoading');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const loadingStatusText = document.getElementById('loadingStatusText');
+    const demoBtn = document.getElementById('demoBtn');
 
     let isCapturing = false;
     let holdStartTime = null;
     let lastFrameData = null;
-    const HOLD_DURATION_MS = 1000; // 枠内で静止してから自動シャッターまでの時間(ミリ秒)
+    let isDemoMode = false;
+    let demoProgress = 0;
+    const HOLD_DURATION_MS = 1000;
     const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * 48;
 
-    // 1. カメラ起動 (Standard getUserMedia)
+    // 1. カメラ起動（段階的フォールバック付き）
     async function initCamera() {
+      // 3秒経っても起動しない場合はデモ切り替えボタンを表示
+      const timeoutTimer = setTimeout(() => {
+        showCameraError("カメラの起動に時間がかかっています。");
+      }, 3000);
+
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false
-        });
-        video.srcObject = stream;
-        video.onloadedmetadata = () => {
-          video.play();
+        // 第一優先: リアカメラ優先指定
+        let stream = await getMediaStream({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
+        clearTimeout(timeoutTimer);
+        setupVideoStream(stream);
+      } catch (err1) {
+        try {
+          // 第二優先: 標準カメラ（PCウェブカメラ等）
+          let stream = await getMediaStream({ video: true });
+          clearTimeout(timeoutTimer);
+          setupVideoStream(stream);
+        } catch (err2) {
+          clearTimeout(timeoutTimer);
+          showCameraError("カメラにアクセスできませんでした。");
+        }
+      }
+    }
+
+    function getMediaStream(constraints) {
+      return navigator.mediaDevices.getUserMedia(constraints);
+    }
+
+    function setupVideoStream(stream) {
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        video.play().then(() => {
           cameraLoading.classList.add('hidden');
           requestAnimationFrame(processVideoFrame);
-        };
-      } catch (err) {
-        cameraLoading.innerHTML = '<p class="text-rose-400 text-sm">カメラへのアクセス許可が必要です。<br>設定をご確認ください。</p>';
-      }
+        }).catch(() => {
+          showCameraError("動画の再生を開始できませんでした。");
+        });
+      };
     }
 
-    // 2. メインループ (Pure JS リアルタイム解析)
+    function showCameraError(msg) {
+      loadingSpinner.classList.add('hidden');
+      loadingStatusText.innerHTML = `<span class="text-rose-400 font-medium">${msg}</span><br><span class="text-xs text-slate-400 mt-1 block">下のボタンからデモ動作をご確認いただけます。</span>`;
+      demoBtn.classList.remove('hidden');
+    }
+
+    // デモモード（実機カメラがなくても枠内検知〜自動シャッターの挙動を確認可能）
+    function startDemoMode() {
+      isDemoMode = true;
+      cameraLoading.classList.add('hidden');
+      statusMessage.textContent = '【デモモード】名刺が近づいて自動撮影されます';
+      
+      // 仮想キャンバスで名刺が近づく映像をシミュレーション
+      const demoCanvas = document.createElement('canvas');
+      demoCanvas.width = 640;
+      demoCanvas.height = 480;
+      const dCtx = demoCanvas.getContext('2d');
+
+      function renderDemo() {
+        if (isCapturing) return;
+        
+        // 背景（暗い卓上）
+        dCtx.fillStyle = '#1e293b';
+        dCtx.fillRect(0, 0, 640, 480);
+
+        demoProgress += 0.015;
+        const cycle = Math.sin(demoProgress); // 0〜1を往復
+
+        // サイクル後半で名刺が中央枠内に収まって静止するシミュレーション
+        if (cycle > 0.3) {
+          // 白い名刺を描画
+          dCtx.fillStyle = '#ffffff';
+          dCtx.shadowColor = 'rgba(0,0,0,0.5)';
+          dCtx.shadowBlur = 15;
+          dCtx.fillRect(160, 140, 320, 200);
+          
+          // 名刺上のテキストデザイン
+          dCtx.shadowBlur = 0;
+          dCtx.fillStyle = '#0f172a';
+          dCtx.font = 'bold 18px sans-serif';
+          dCtx.fillText('株式会社 テクノロジー', 190, 180);
+          dCtx.font = '14px sans-serif';
+          dCtx.fillText('山田 太郎 様', 190, 220);
+          dCtx.fillStyle = '#64748b';
+          dCtx.fillText('代表取締役CEO', 190, 245);
+        }
+
+        // 判定へ引き渡し
+        analyzeGuideFromCanvas(demoCanvas);
+        requestAnimationFrame(renderDemo);
+      }
+
+      requestAnimationFrame(renderDemo);
+    }
+
+    // 2. メイン解析ループ
     function processVideoFrame() {
-      if (!isCapturing && video.readyState === video.HAVE_ENOUGH_DATA) {
-        analyzeGuideArea();
+      if (!isDemoMode && !isCapturing && video.readyState === video.HAVE_ENOUGH_DATA) {
+        analyzeGuideFromCanvas(video);
       }
-      requestAnimationFrame(processVideoFrame);
+      if (!isDemoMode) {
+        requestAnimationFrame(processVideoFrame);
+      }
     }
 
-    // 3. Pure JS による軽量・高感度なカード枠内検知アルゴリズム
-    function analyzeGuideArea() {
-      const vWidth = video.videoWidth;
-      const vHeight = video.videoHeight;
-      if (vWidth === 0 || vHeight === 0) return;
-
-      // 解析用キャンバスサイズを小さく抑えて超高速処理 (160x120)
+    // 3. 高速画像解析（ピクセル差分・明暗・エッジ）
+    function analyzeGuideFromCanvas(sourceElement) {
       const sampleW = 160;
       const sampleH = 120;
       canvas.width = sampleW;
       canvas.height = sampleH;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(video, 0, 0, sampleW, sampleH);
+      ctx.drawImage(sourceElement, 0, 0, sampleW, sampleH);
 
-      // 画面中央のガイド枠に相当する領域 (ROI) を抽出
       const roiW = Math.floor(sampleW * 0.8);
       const roiH = Math.floor(sampleH * 0.45);
       const roiX = Math.floor((sampleW - roiW) / 2);
@@ -159,7 +243,6 @@
       const imgData = ctx.getImageData(roiX, roiY, roiW, roiH);
       const pixels = imgData.data;
 
-      // 輝度(明るさ)とコントラスト(エッジ)の解析
       let totalLuminance = 0;
       let edgeScore = 0;
       const pixelCount = roiW * roiH;
@@ -171,40 +254,32 @@
         const lum = (r * 0.299 + g * 0.587 + b * 0.114);
         totalLuminance += lum;
 
-        // 隣接ピクセルとの差分で輪郭(エッジ)強度を計算
         if (i + 4 < pixels.length) {
-          const nextR = pixels[i + 4];
-          const nextG = pixels[i + 5];
-          const nextB = pixels[i + 6];
-          const nextLum = (nextR * 0.299 + nextG * 0.587 + nextB * 0.114);
+          const nextLum = (pixels[i + 4] * 0.299 + pixels[i + 5] * 0.587 + pixels[i + 6] * 0.114);
           edgeScore += Math.abs(lum - nextLum);
         }
       }
 
-      const avgLuminance = totalLuminance / pixelCount; // 枠内の平均輝度
-      const avgEdge = edgeScore / pixelCount;           // 枠内の平均エッジ感度
+      const avgLuminance = totalLuminance / pixelCount;
+      const avgEdge = edgeScore / pixelCount;
 
-      // 前フレームとの比較による手ぶれ(静止度)判定
       let frameDifference = 999;
       if (lastFrameData) {
         let diffSum = 0;
-        for (let i = 0; i < pixels.length; i += 16) { // 軽快動作のため間引き比較
+        for (let i = 0; i < pixels.length; i += 16) {
           diffSum += Math.abs(pixels[i] - lastFrameData[i]);
         }
         frameDifference = diffSum / (pixels.length / 16);
       }
       lastFrameData = pixels;
 
-      // 判定条件: 
-      // 1. 枠内に十分な輝度・明暗コントラストがある (名刺がかざされている)
-      // 2. フレーム間の変化率が一定以下 (手ぶれせずに固定されている)
-      const hasObjectInGuide = (avgLuminance > 50 && avgEdge > 12);
-      const isStable = (frameDifference < 12);
+      const hasObjectInGuide = (avgLuminance > 50 && avgEdge > 10);
+      const isStable = (frameDifference < 15);
 
       handleDetectionResult(hasObjectInGuide && isStable);
     }
 
-    // 4. 検知状態に応じたUIアニメーション & 自動撮影発動
+    // 4. 自動シャッター & UI連動
     function handleDetectionResult(isCardDetectedAndStill) {
       if (isCardDetectedAndStill) {
         guideBox.classList.remove('border-slate-400/80');
@@ -230,35 +305,25 @@
         guideBox.classList.add('border-slate-400/80');
         scanLine.classList.add('hidden');
         countdownOverlay.classList.add('opacity-0');
-        statusMessage.textContent = '名刺を枠内にかざしてください';
+        statusMessage.textContent = isDemoMode ? '【デモモード】名刺が近づいて自動撮影されます' : '名刺を枠内にかざしてください';
         statusMessage.className = "text-sm text-slate-400 mt-1";
       }
     }
 
-    // 5. シャッター撮影処理
+    // 5. シャッター撮影
     function takePhoto() {
       if (isCapturing) return;
       isCapturing = true;
 
       playShutterSound();
 
-      // 画面フラッシュ演出
       const flash = document.createElement('div');
       flash.className = 'fixed inset-0 bg-white z-50 transition-opacity duration-300';
       document.body.appendChild(flash);
       setTimeout(() => flash.style.opacity = '0', 50);
       setTimeout(() => flash.remove(), 350);
 
-      // 高解像度でキャプチャ
-      const finalCanvas = document.createElement('canvas');
-      finalCanvas.width = video.videoWidth;
-      finalCanvas.height = video.videoHeight;
-      const ctx = finalCanvas.getContext('2d');
-      ctx.drawImage(video, 0, 0);
-
-      const base64Image = finalCanvas.toDataURL('image/jpeg', 0.9);
-
-      statusMessage.textContent = '名刺を撮影しました！';
+      statusMessage.textContent = '名刺を自動撮影しました！';
 
       setTimeout(() => {
         alert('名刺の自動撮影が完了しました！受付を開始します。');
@@ -268,7 +333,6 @@
       }, 600);
     }
 
-    // 6. 電子シャッター音効果
     function playShutterSound() {
       try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
