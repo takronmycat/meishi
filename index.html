@@ -5,28 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>来客受付</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Global Module declaration for OpenCV initialization -->
-  <script>
-    var Module = {
-      onRuntimeInitialized: function() {
-        if (window.onOpenCvReady) {
-          window.onOpenCvReady();
-        } else {
-          window.cvReadyPending = true;
-        }
-      }
-    };
-  </script>
-  <!-- OpenCV.js with reliable CDN source -->
-  <script async src="https://docs.opencv.org/4.9.0/opencv.js"></script>
   <style>
     /* Guide Overlay Line Animations */
     .scan-line {
       position: absolute;
       width: 100%;
       height: 2px;
-      background: linear-gradient(90deg, transparent, #3b82f6, transparent);
-      animation: scan 2s linear infinite;
+      background: linear-gradient(90deg, transparent, #10b981, transparent);
+      animation: scan 1.8s linear infinite;
     }
     @keyframes scan {
       0% { top: 0%; }
@@ -44,9 +30,9 @@
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col items-center justify-between p-4 font-sans">
 
   <!-- Top Header -->
-  <header class="w-full max-w-lg text-center pt-2 pb-4">
+  <header class="w-full max-w-lg text-center pt-2 pb-2">
     <h1 class="text-2xl font-bold tracking-wide text-white">ご来訪受付</h1>
-    <p class="text-sm text-slate-400 mt-1" id="statusMessage">名刺を画面中央の枠内にかざしてください</p>
+    <p class="text-sm text-slate-400 mt-1" id="statusMessage">名刺を枠内にかざしてください</p>
   </header>
 
   <!-- Camera Frame Section -->
@@ -55,10 +41,10 @@
     <!-- Live Video Stream -->
     <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover"></video>
     
-    <!-- Hidden Canvas for OpenCV processing -->
+    <!-- Analysis Canvas (hidden) -->
     <canvas id="processCanvas" class="hidden"></canvas>
 
-    <!-- Overlay Guide Box (Aspect ratio matches standard Business Card ~ 1.65:1) -->
+    <!-- Overlay Guide Box (Standard Business Card Aspect ~ 1.65:1) -->
     <div id="guideBox" class="absolute w-[82%] h-[48%] border-2 border-dashed border-slate-400/80 rounded-lg flex flex-col justify-between p-2 transition-all duration-300 pointer-events-none">
       <!-- Corner Markers -->
       <div class="flex justify-between">
@@ -80,31 +66,28 @@
       <div class="relative w-28 h-28 flex items-center justify-center">
         <svg class="w-full h-full">
           <circle class="text-slate-600" stroke-width="6" stroke="currentColor" fill="transparent" r="48" cx="56" cy="56"/>
-          <circle id="progressCircle" class="text-emerald-500 progress-ring__circle" stroke-width="6" stroke-dasharray="301.59" stroke-dashoffset="301.59" stroke-linecap="round" stroke="currentColor" fill="transparent" r="48" cx="56" cy="56"/>
+          <circle id="progressCircle" class="text-emerald-400 progress-ring__circle" stroke-width="6" stroke-dasharray="301.59" stroke-dashoffset="301.59" stroke-linecap="round" stroke="currentColor" fill="transparent" r="48" cx="56" cy="56"/>
         </svg>
-        <span id="countdownText" class="absolute text-3xl font-bold text-white">動かさないでください</span>
+        <span id="countdownText" class="absolute text-center text-xs font-bold text-white leading-tight">そのまま<br>動かさないでください</span>
       </div>
-      <p class="text-emerald-400 font-semibold text-sm mt-3">自動撮影中...</p>
+      <p class="text-emerald-400 font-semibold text-sm mt-3">自動シャッター切断中...</p>
     </div>
 
-    <!-- OpenCV Loading Spinner -->
-    <div id="cvLoading" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center gap-3 p-4 text-center z-10">
-      <div id="cvSpinner" class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-      <p id="cvLoadingText" class="text-sm text-slate-300">カメラ検出エンジン起動中...</p>
-      <button id="fallbackBtn" onclick="enableFallbackMode()" class="hidden mt-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-xs text-slate-200 rounded-lg border border-slate-500">
-        エンジンをスキップして手動撮影で利用する
-      </button>
+    <!-- Initializing Camera Overlay -->
+    <div id="cameraLoading" class="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center gap-3 p-4 text-center z-10">
+      <div class="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+      <p class="text-sm text-slate-300">カメラを起動しています...</p>
     </div>
   </main>
 
   <!-- Bottom Actions -->
-  <footer class="w-full max-w-lg flex flex-col items-center gap-3 pb-4">
+  <footer class="w-full max-w-lg flex flex-col items-center gap-3 pb-2">
     <div class="flex items-center gap-2 text-xs text-slate-400">
       <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-      オートシャッターモード動作中
+      スマートオートシャッター有効
     </div>
 
-    <!-- Manual Fallback Button in case auto fails -->
+    <!-- Manual Capture Button -->
     <button id="manualBtn" onclick="takePhoto()" class="w-full max-w-xs py-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold text-sm rounded-xl border border-slate-600 transition flex items-center justify-center gap-2">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h0.93a2 2 0 001.664-.89l0.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l0.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
       手動で撮影する
@@ -119,47 +102,15 @@
     const statusMessage = document.getElementById('statusMessage');
     const countdownOverlay = document.getElementById('countdownOverlay');
     const progressCircle = document.getElementById('progressCircle');
-    const cvLoading = document.getElementById('cvLoading');
-    const cvLoadingText = document.getElementById('cvLoadingText');
-    const fallbackBtn = document.getElementById('fallbackBtn');
+    const cameraLoading = document.getElementById('cameraLoading');
 
-    let cvReady = false;
     let isCapturing = false;
     let holdStartTime = null;
-    let cvTimeoutTimer = null;
-    const HOLD_DURATION_MS = 1200; // 枠内で静止したとみなす時間(ミリ秒)
+    let lastFrameData = null;
+    const HOLD_DURATION_MS = 1000; // 枠内で静止してから自動シャッターまでの時間(ミリ秒)
     const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * 48;
 
-    // 1. OpenCV Ready Callback
-    window.onOpenCvReady = function() {
-      if (cvReady) return;
-      cvReady = true;
-      if (cvTimeoutTimer) clearTimeout(cvTimeoutTimer);
-      cvLoading.classList.add('hidden');
-      statusMessage.textContent = '名刺を画面中央の枠内にかざしてください';
-    };
-
-    // Check if OpenCV loaded before script execution
-    if (window.cvReadyPending) {
-      window.onOpenCvReady();
-    }
-
-    // 8-second Timeout fallback if OpenCV fails to load (e.g. slow network)
-    cvTimeoutTimer = setTimeout(() => {
-      if (!cvReady) {
-        cvLoadingText.textContent = '検出エンジンの読み込みに時間がかかっています。';
-        cvLoadingText.classList.add('text-amber-400');
-        fallbackBtn.classList.remove('hidden');
-      }
-    }, 8000);
-
-    function enableFallbackMode() {
-      cvLoading.classList.add('hidden');
-      statusMessage.textContent = '手動撮影モードで受付を行ってください';
-      statusMessage.className = "text-sm text-amber-400 font-semibold mt-1";
-    }
-
-    // 2. Initialize Camera
+    // 1. カメラ起動 (Standard getUserMedia)
     async function initCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -169,97 +120,98 @@
         video.srcObject = stream;
         video.onloadedmetadata = () => {
           video.play();
+          cameraLoading.classList.add('hidden');
           requestAnimationFrame(processVideoFrame);
         };
       } catch (err) {
-        alert('カメラへのアクセスが拒否されたか、カメラが見つかりません。');
+        cameraLoading.innerHTML = '<p class="text-rose-400 text-sm">カメラへのアクセス許可が必要です。<br>設定をご確認ください。</p>';
       }
     }
 
-    // 3. Main Auto-Detection Loop
+    // 2. メインループ (Pure JS リアルタイム解析)
     function processVideoFrame() {
-      if (!isCapturing && cvReady && video.readyState === video.HAVE_ENOUGH_DATA) {
-        detectCardInGuide();
+      if (!isCapturing && video.readyState === video.HAVE_ENOUGH_DATA) {
+        analyzeGuideArea();
       }
       requestAnimationFrame(processVideoFrame);
     }
 
-    // 4. OpenCV Card Detection in Guide ROI
-    function detectCardInGuide() {
+    // 3. Pure JS による軽量・高感度なカード枠内検知アルゴリズム
+    function analyzeGuideArea() {
       const vWidth = video.videoWidth;
       const vHeight = video.videoHeight;
-      if (vWidth === 0 || vHeight === 0 || !window.cv) return;
+      if (vWidth === 0 || vHeight === 0) return;
 
-      canvas.width = vWidth;
-      canvas.height = vHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, vWidth, vHeight);
+      // 解析用キャンバスサイズを小さく抑えて超高速処理 (160x120)
+      const sampleW = 160;
+      const sampleH = 120;
+      canvas.width = sampleW;
+      canvas.height = sampleH;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(video, 0, 0, sampleW, sampleH);
 
-      // ROI (Region of Interest) calculation matching guide box
-      const roiWidth = vWidth * 0.8;
-      const roiHeight = vHeight * 0.45;
-      const roiX = (vWidth - roiWidth) / 2;
-      const roiY = (vHeight - roiHeight) / 2;
+      // 画面中央のガイド枠に相当する領域 (ROI) を抽出
+      const roiW = Math.floor(sampleW * 0.8);
+      const roiH = Math.floor(sampleH * 0.45);
+      const roiX = Math.floor((sampleW - roiW) / 2);
+      const roiY = Math.floor((sampleH - roiH) / 2);
 
-      try {
-        let src = cv.imread(canvas);
-        let rect = new cv.Rect(roiX, roiY, roiWidth, roiHeight);
-        let roi = src.roi(rect);
+      const imgData = ctx.getImageData(roiX, roiY, roiW, roiH);
+      const pixels = imgData.data;
 
-        // Preprocessing: Grayscale -> Gaussian Blur -> Canny Edge
-        let gray = new cv.Mat();
-        let blurred = new cv.Mat();
-        let edges = new cv.Mat();
+      // 輝度(明るさ)とコントラスト(エッジ)の解析
+      let totalLuminance = 0;
+      let edgeScore = 0;
+      const pixelCount = roiW * roiH;
 
-        cv.cvtColor(roi, gray, cv.COLOR_RGBA2GRAY);
-        cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
-        cv.Canny(blurred, edges, 50, 150);
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i];
+        const g = pixels[i + 1];
+        const b = pixels[i + 2];
+        const lum = (r * 0.299 + g * 0.587 + b * 0.114);
+        totalLuminance += lum;
 
-        // Find contours
-        let contours = new cv.MatVector();
-        let hierarchy = new cv.Mat();
-        cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-        let cardFound = false;
-        const roiArea = roiWidth * roiHeight;
-
-        for (let i = 0; i < contours.size(); ++i) {
-          let cnt = contours.get(i);
-          let area = cv.contourArea(cnt);
-          
-          if (area > roiArea * 0.35) {
-            let peri = cv.arcLength(cnt, true);
-            let approx = new cv.Mat();
-            cv.approxPolyDP(cnt, approx, 0.04 * peri, true);
-
-            if (approx.rows === 4) {
-              cardFound = true;
-              approx.delete();
-              break;
-            }
-            approx.delete();
-          }
+        // 隣接ピクセルとの差分で輪郭(エッジ)強度を計算
+        if (i + 4 < pixels.length) {
+          const nextR = pixels[i + 4];
+          const nextG = pixels[i + 5];
+          const nextB = pixels[i + 6];
+          const nextLum = (nextR * 0.299 + nextG * 0.587 + nextB * 0.114);
+          edgeScore += Math.abs(lum - nextLum);
         }
-
-        // Clean up memory
-        src.delete(); roi.delete(); gray.delete(); blurred.delete(); edges.delete();
-        contours.delete(); hierarchy.delete();
-
-        handleDetectionResult(cardFound);
-
-      } catch (e) {
-        // Fallback or ignore frame errors
       }
+
+      const avgLuminance = totalLuminance / pixelCount; // 枠内の平均輝度
+      const avgEdge = edgeScore / pixelCount;           // 枠内の平均エッジ感度
+
+      // 前フレームとの比較による手ぶれ(静止度)判定
+      let frameDifference = 999;
+      if (lastFrameData) {
+        let diffSum = 0;
+        for (let i = 0; i < pixels.length; i += 16) { // 軽快動作のため間引き比較
+          diffSum += Math.abs(pixels[i] - lastFrameData[i]);
+        }
+        frameDifference = diffSum / (pixels.length / 16);
+      }
+      lastFrameData = pixels;
+
+      // 判定条件: 
+      // 1. 枠内に十分な輝度・明暗コントラストがある (名刺がかざされている)
+      // 2. フレーム間の変化率が一定以下 (手ぶれせずに固定されている)
+      const hasObjectInGuide = (avgLuminance > 50 && avgEdge > 12);
+      const isStable = (frameDifference < 12);
+
+      handleDetectionResult(hasObjectInGuide && isStable);
     }
 
-    // 5. Detection Feedback & Auto Trigger
-    function handleDetectionResult(found) {
-      if (found) {
+    // 4. 検知状態に応じたUIアニメーション & 自動撮影発動
+    function handleDetectionResult(isCardDetectedAndStill) {
+      if (isCardDetectedAndStill) {
         guideBox.classList.remove('border-slate-400/80');
-        guideBox.classList.add('border-emerald-400', 'shadow-[0_0_20px_rgba(52,211,153,0.5)]');
+        guideBox.classList.add('border-emerald-400', 'shadow-[0_0_25px_rgba(16,185,129,0.6)]');
         scanLine.classList.remove('hidden');
-        statusMessage.textContent = '名刺を固定してください...';
-        statusMessage.className = "text-sm text-emerald-400 font-semibold mt-1";
+        statusMessage.textContent = 'そのまま動かさないでください...';
+        statusMessage.className = "text-sm text-emerald-400 font-semibold mt-1 animate-pulse";
 
         if (!holdStartTime) holdStartTime = Date.now();
         const elapsedTime = Date.now() - holdStartTime;
@@ -274,54 +226,57 @@
         }
       } else {
         holdStartTime = null;
-        guideBox.classList.remove('border-emerald-400', 'shadow-[0_0_20px_rgba(52,211,153,0.5)]');
+        guideBox.classList.remove('border-emerald-400', 'shadow-[0_0_25px_rgba(16,185,129,0.6)]');
         guideBox.classList.add('border-slate-400/80');
         scanLine.classList.add('hidden');
         countdownOverlay.classList.add('opacity-0');
-        statusMessage.textContent = '名刺を画面中央の枠内にかざしてください';
+        statusMessage.textContent = '名刺を枠内にかざしてください';
         statusMessage.className = "text-sm text-slate-400 mt-1";
       }
     }
 
-    // 6. Capture Action
+    // 5. シャッター撮影処理
     function takePhoto() {
       if (isCapturing) return;
       isCapturing = true;
 
       playShutterSound();
 
+      // 画面フラッシュ演出
       const flash = document.createElement('div');
       flash.className = 'fixed inset-0 bg-white z-50 transition-opacity duration-300';
       document.body.appendChild(flash);
       setTimeout(() => flash.style.opacity = '0', 50);
       setTimeout(() => flash.remove(), 350);
 
+      // 高解像度でキャプチャ
       const finalCanvas = document.createElement('canvas');
       finalCanvas.width = video.videoWidth;
       finalCanvas.height = video.videoHeight;
       const ctx = finalCanvas.getContext('2d');
       ctx.drawImage(video, 0, 0);
 
-      const base64Image = finalCanvas.toDataURL('image/jpeg', 0.85);
+      const base64Image = finalCanvas.toDataURL('image/jpeg', 0.9);
 
-      statusMessage.textContent = '受付データを送信中...';
+      statusMessage.textContent = '名刺を撮影しました！';
 
       setTimeout(() => {
-        alert('名刺の撮影が完了しました！受付を行いました。');
+        alert('名刺の自動撮影が完了しました！受付を開始します。');
         isCapturing = false;
         holdStartTime = null;
         countdownOverlay.classList.add('opacity-0');
-      }, 800);
+      }, 600);
     }
 
+    // 6. 電子シャッター音効果
     function playShutterSound() {
       try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(120, audioCtx.currentTime + 0.08);
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(220, audioCtx.currentTime + 0.08);
         gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
         gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
         osc.connect(gain);
