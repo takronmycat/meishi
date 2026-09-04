@@ -2,455 +2,189 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>受付</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>来校者受付</title>
   <style>
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    /* ガイド枠のアニメーション */
-    @keyframes pulse-border {
-      0%, 100% { border-color: rgba(59, 130, 246, 0.6); box-shadow: 0 0 15px rgba(59, 130, 246, 0.3); }
-      50% { border-color: rgba(99, 102, 241, 0.9); box-shadow: 0 0 25px rgba(99, 102, 241, 0.5); }
-    }
-    .guide-pulse {
-      animation: pulse-border 2s infinite ease-in-out;
-    }
-    /* 自動撮影検出時の成功リング */
-    .guide-success {
-      border-color: #10b981 !important;
-      box-shadow: 0 0 30px rgba(16, 185, 129, 0.8) !important;
-    }
-    /* 円形プログレスゲージのCSSアニメーション */
-    .progress-ring__circle {
-      transition: stroke-dashoffset 0.1s linear;
-      transform: rotate(-90deg);
-      transform-origin: 50% 50%;
-    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9f9f9; color: #333; text-align: center; margin: 0; padding: 20px; }
+    .container { max-width: 500px; margin: 0 auto; background: #fff; padding: 30px 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    h1 { font-size: 22px; margin-bottom: 30px; color: #2c3e50; }
+    
+    /* 画面切り替え用 */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ボタン */
+    .btn { display: block; width: 100%; padding: 18px; margin-bottom: 15px; font-size: 18px; font-weight: bold; color: #fff; background: #3498db; border: none; border-radius: 8px; cursor: pointer; text-decoration: none; box-sizing: border-box; }
+    .btn-secondary { background: #95a5a6; }
+    .btn-success { background: #2ecc71; }
+    .btn:active { opacity: 0.8; }
+
+    /* カメラとプレビュー */
+    #videoArea { width: 100%; max-width: 400px; border-radius: 8px; margin-bottom: 20px; background: #000; }
+    #previewImg { width: 100%; max-width: 400px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; }
+    
+    /* 受付完了画面 */
+    .receipt-box { background: #e8f8f5; border: 2px dashed #1abc9c; padding: 20px; border-radius: 8px; margin: 20px 0; }
+    .receipt-number { font-size: 32px; font-weight: bold; color: #16a085; letter-spacing: 2px; margin: 10px 0; }
+    
+    .loading { font-size: 18px; color: #e67e22; font-weight: bold; margin-bottom: 20px; }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between items-center p-4 selection:bg-blue-500 selection:text-white">
+<body>
 
-  <!-- ヘッダー -->
-  <header class="w-full max-w-lg text-center pt-2 pb-3 relative">
-    <div class="inline-flex items-center gap-2 px-3 py-1 bg-slate-900 border border-slate-800 rounded-full mb-2">
-      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-      <span class="text-xs font-semibold text-slate-300">受付用 名刺自動スキャナー</span>
-    </div>
-    <h1 class="text-2xl font-extrabold text-white tracking-tight">名刺をお持ちください</h1>
-    <p id="statusMessage" class="text-sm text-slate-400 mt-1">名刺を枠内にかざしてください</p>
-  </header>
+<div class="container">
+  
+  <!-- 1. トップ画面 -->
+  <div id="view-home" class="view active">
+    <h1>来校受付</h1>
+    <p style="margin-bottom: 30px; font-size: 16px;">名刺をお持ちですか？</p>
+    <button class="btn" onclick="startCamera()">名刺をスキャンする</button>
+    <button class="btn btn-secondary" onclick="alert('今回は名刺による受付のみ稼働しています。')">名刺をお持ちでない方はこちら</button>
+  </div>
 
-  <!-- カメラビューエリア -->
-  <main class="w-full max-w-lg relative flex flex-col items-center my-auto">
-    <div id="cameraContainer" class="relative w-full aspect-[4/3] bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex items-center justify-center">
-      
-      <video id="video" class="w-full h-full object-cover" autoplay playsinline muted></video>
+  <!-- 2. カメラ撮影画面 -->
+  <div id="view-camera" class="view">
+    <h1>名刺を撮影してください</h1>
+    <!-- iOS対応のため playsinline が必須 -->
+    <video id="videoArea" autoplay playsinline></video>
+    <button class="btn" onclick="takePhoto()">撮影する</button>
+    <button class="btn btn-secondary" onclick="showView('view-home'); stopCamera();">戻る</button>
+  </div>
 
-      <!-- ガイド枠 Overlay -->
-      <div id="guideFrame" class="absolute inset-8 border-2 border-blue-500/60 rounded-xl guide-pulse pointer-events-none flex items-center justify-center transition-all duration-300">
-        <div class="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-blue-400 rounded-tl-sm"></div>
-        <div class="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-blue-400 rounded-tr-sm"></div>
-        <div class="absolute -bottom-1 -left-1 w-4 h-4 border-b-4 border-l-4 border-blue-400 rounded-bl-sm"></div>
-        <div class="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-blue-400 rounded-br-sm"></div>
-
-        <!-- カウントダウンゲージ -->
-        <div id="countdownOverlay" class="opacity-0 transition-opacity duration-200 flex flex-col items-center gap-1 bg-slate-950/70 p-3 rounded-full backdrop-blur-sm">
-          <svg class="w-16 h-16">
-            <circle class="text-slate-700" stroke-width="4" stroke="currentColor" fill="transparent" r="28" cx="32" cy="32"/>
-            <circle id="progressCircle" class="text-emerald-400 progress-ring__circle" stroke-width="4" stroke-dasharray="175.9" stroke-dashoffset="175.9" stroke-linecap="round" stroke="currentColor" fill="transparent" r="28" cx="32" cy="32"/>
-          </svg>
-        </div>
-      </div>
-
-      <!-- 初期化中スピナー -->
-      <div id="cameraLoading" class="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center gap-3 p-6 text-center z-10">
-        <div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-        <p class="text-sm text-slate-300 font-medium">カメラを起動中...</p>
-        <button onclick="startDemoMode()" class="mt-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-blue-400 rounded-lg border border-slate-700 transition">
-          デモモードでテスト動作する
-        </button>
-      </div>
-
-      <!-- 解析用隠しCanvas -->
-      <canvas id="analysisCanvas" class="hidden"></canvas>
-    </div>
-  </main>
-
-  <footer class="w-full max-w-lg text-center py-4 text-xs text-slate-500">
-    受付システム &copy; 名刺自動認識
-  </footer>
-
-  <!-- プレビュー＆確認モーダル -->
-  <div id="resultModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50 hidden opacity-0 transition-opacity duration-300">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 text-center shadow-2xl flex flex-col items-center">
-      <h3 class="text-base font-bold text-white mb-1">この画像でよろしいですか？</h3>
-      <p class="text-xs text-slate-400 mb-4">文字が鮮明に読み取れるかご確認ください</p>
-
-      <div class="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-950 border border-slate-800 mb-4 flex items-center justify-center">
-        <img id="previewImage" class="w-full h-full object-contain" src="" alt="名刺プレビュー">
-      </div>
-
-      <div class="w-full flex gap-2" id="modalButtons">
-        <button onclick="retakePhoto()" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-xl text-slate-200 border border-slate-600 transition flex items-center justify-center gap-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-          撮り直す
-        </button>
-        <button id="saveBtn" onclick="confirmAndSavePhoto()" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-xs font-bold rounded-xl text-white shadow-lg transition flex items-center justify-center gap-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-          保存
-        </button>
-      </div>
-      <div id="uploadStatus" class="mt-3 text-xs font-medium text-slate-300 hidden"></div>
+  <!-- 3. 確認画面 -->
+  <div id="view-preview" class="view">
+    <h1>この画像で受付しますか？</h1>
+    <img id="previewImg" src="" alt="プレビュー">
+    <div id="loadingMsg" class="loading" style="display: none;">送信中...そのままお待ちください</div>
+    <div id="actionButtons">
+      <button class="btn btn-success" onclick="submitData()">受付する</button>
+      <button class="btn btn-secondary" onclick="retakePhoto()">撮り直す</button>
     </div>
   </div>
 
-  <script>
-    // DOM要素の参照
-    let video = document.getElementById('video');
-    let cameraLoading = document.getElementById('cameraLoading');
-    let guideFrame = document.getElementById('guideFrame');
-    let statusMessage = document.getElementById('statusMessage');
-    let countdownOverlay = document.getElementById('countdownOverlay');
-    let progressCircle = document.getElementById('progressCircle');
-    let analysisCanvas = document.getElementById('analysisCanvas');
-    let ctx = analysisCanvas.getContext('2d', { willReadFrequently: true });
+  <!-- 4. 完了画面 -->
+  <div id="view-success" class="view">
+    <h1>受付完了</h1>
+    <p>以下の番号で受付いたしました。</p>
+    <div class="receipt-box">
+      <div>受付番号</div>
+      <div class="receipt-number" id="displayReceipt">000000</div>
+    </div>
+    <p>ありがとうございました。<br>担当者が参りますのでお待ちください。</p>
+    <button class="btn" style="margin-top:20px;" onclick="location.reload()">最初の画面に戻る</button>
+  </div>
 
-    // ステート管理
-    let isCapturing = false;
-    let holdStartTime = null;
-    let lastFrameData = null;
-    let isDemoMode = false;
-    let demoProgress = 0;
-    let activeDemoCanvas = null;
-    let lastCapturedDataUrl = null;
+</div>
 
-    const HOLD_DURATION_MS = 1000; // 1秒保持で撮影
-    const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * 28;
+<!-- 画像処理用（非表示） -->
+<canvas id="canvas" style="display:none;"></canvas>
 
-    // カメラ起動初期化
-    async function initCamera() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        showCameraError("お使いのブラウザはカメラアクセスに対応していません。");
-        return;
-      }
+<script>
+  // ==========================================
+  // 【重要】GASの「WebアプリのURL」をここに貼り付けます
+  // ==========================================
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxTtiZZ4L9VLX_fm8bWv7Cgq0tZsaoibVRcit6H_uN5JC1YoM1FPnGOm-gCgI14OyB8wA/exec";
+  
+  let videoStream = null;
+  let capturedBase64 = "";
 
-      try {
-        const constraints = {
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        };
+  // 画面切り替え制御
+  function showView(viewId) {
+    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+    document.getElementById(viewId).classList.add('active');
+  }
 
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        handleStreamSuccess(stream);
-      } catch (err) {
-        console.warn('環境カメラでの取得失敗。標準カメラで再試行します:', err);
-        try {
-          const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
-          handleStreamSuccess(fallbackStream);
-        } catch (fallbackErr) {
-          console.error('カメラ起動エラー:', fallbackErr);
-          showCameraError("カメラを起動できませんでした。ブラウザの権限設定をご確認ください。");
+  // カメラ起動
+  async function startCamera() {
+    showView('view-camera');
+    const video = document.getElementById('videoArea');
+    try {
+      // 背面カメラを優先
+      const constraints = { video: { facingMode: "environment" } };
+      videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = videoStream;
+    } catch (err) {
+      alert("カメラの起動に失敗しました。ブラウザのカメラ許可設定をご確認ください。");
+      showView('view-home');
+    }
+  }
+
+  // カメラ停止
+  function stopCamera() {
+    if (videoStream) {
+      videoStream.getTracks().forEach(track => track.stop());
+      videoStream = null;
+    }
+  }
+
+  // 撮影処理
+  function takePhoto() {
+    const video = document.getElementById('videoArea');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // 画像サイズを最大1024pxに抑える（送信速度向上とGASの制限回避のため）
+    const MAX_WIDTH = 1024;
+    let width = video.videoWidth;
+    let height = video.videoHeight;
+    
+    if (width > MAX_WIDTH) {
+      height = Math.floor(height * (MAX_WIDTH / width));
+      width = MAX_WIDTH;
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+    ctx.drawImage(video, 0, 0, width, height);
+
+    // JPEG形式で圧縮率0.7でBase64化
+    capturedBase64 = canvas.toDataURL("image/jpeg", 0.7);
+    
+    document.getElementById('previewImg').src = capturedBase64;
+    stopCamera();
+    showView('view-preview');
+  }
+
+  // 撮り直し
+  function retakePhoto() {
+    capturedBase64 = "";
+    startCamera();
+  }
+
+  // GASへデータ送信
+  async function submitData() {
+    if (!capturedBase64) return;
+    
+    document.getElementById('actionButtons').style.display = 'none';
+    document.getElementById('loadingMsg').style.display = 'block';
+
+    try {
+      // CORS対策として fetch の挙動を調整。
+      // content-typeを text/plain にすることでプリフライト(OPTIONS)リクエストを回避し、GASへ送信可能にする。
+      const response = await fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify({ image: capturedBase64 }),
+        headers: {
+          "Content-Type": "text/plain" 
         }
-      }
-    }
-
-    function handleStreamSuccess(stream) {
-      video.srcObject = stream;
-      video.onloadedmetadata = () => {
-        cameraLoading.classList.add('hidden');
-        video.play();
-        requestAnimationFrame(processFrame);
-      };
-    }
-
-    function showCameraError(message) {
-      cameraLoading.innerHTML = `
-        <p class="text-xs text-rose-400 font-semibold mb-1">カメラを起動できませんでした</p>
-        <p class="text-[11px] text-slate-400 mb-3">${message}</p>
-        <button onclick="startDemoMode()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white rounded-lg shadow-md transition">
-          デモモードで動作を確認する
-        </button>
-      `;
-    }
-
-    // デモモード（PCテスト用）
-    function startDemoMode() {
-      isDemoMode = true;
-      cameraLoading.classList.add('hidden');
-      statusMessage.textContent = '【デモモード】名刺が近づいて自動撮影されます';
+      });
       
-      const demoCanvas = document.createElement('canvas');
-      demoCanvas.width = 640;
-      demoCanvas.height = 480;
-      activeDemoCanvas = demoCanvas;
-      const dCtx = demoCanvas.getContext('2d');
-
-      function renderDemo() {
-        if (isCapturing) {
-          requestAnimationFrame(renderDemo);
-          return;
-        }
-        
-        dCtx.fillStyle = '#1e293b';
-        dCtx.fillRect(0, 0, 640, 480);
-
-        demoProgress += 0.012;
-        const cycle = Math.sin(demoProgress);
-
-        if (cycle > 0.2) {
-          dCtx.fillStyle = '#ffffff';
-          dCtx.shadowColor = 'rgba(0,0,0,0.5)';
-          dCtx.shadowBlur = 15;
-          dCtx.fillRect(160, 140, 320, 200);
-          
-          dCtx.shadowBlur = 0;
-          dCtx.fillStyle = '#0f172a';
-          dCtx.font = 'bold 18px sans-serif';
-          dCtx.fillText('株式会社 テクノロジー', 190, 180);
-          dCtx.font = '14px sans-serif';
-          dCtx.fillText('山田 太郎 様', 190, 220);
-          dCtx.fillStyle = '#64748b';
-          dCtx.fillText('代表取締役CEO', 190, 245);
-        }
-
-        analyzeGuideFromCanvas(demoCanvas);
-        requestAnimationFrame(renderDemo);
-      }
-      renderDemo();
-    }
-
-    // メインフレーム処理ループ
-    function processFrame() {
-      if (isCapturing || isDemoMode) {
-        if (!isDemoMode) requestAnimationFrame(processFrame);
-        return;
-      }
-
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        analyzeGuideFromCanvas(video);
-      }
-
-      requestAnimationFrame(processFrame);
-    }
-
-    // 枠内の輝度と手ぶれ判定アルゴリズム
-    function analyzeGuideFromCanvas(source) {
-      const width = 320;
-      const height = 240;
-      analysisCanvas.width = width;
-      analysisCanvas.height = height;
-
-      ctx.drawImage(source, 0, 0, width, height);
-
-      const rectX = Math.floor(width * 0.2);
-      const rectY = Math.floor(height * 0.3);
-      const rectW = Math.floor(width * 0.6);
-      const rectH = Math.floor(height * 0.4);
-
-      const imageData = ctx.getImageData(rectX, rectY, rectW, rectH);
-      const data = imageData.data;
-
-      let whitePixelCount = 0;
-      let currentFrameSummary = 0;
-
-      for (let i = 0; i < data.length; i += 16) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        
-        const brightness = (r + g + b) / 3;
-        if (brightness > 130) {
-          whitePixelCount++;
-        }
-        currentFrameSummary += brightness;
-      }
-
-      const totalPixels = rectW * rectH;
-      const whiteRatio = whitePixelCount / (totalPixels / 4);
-
-      let movement = 999;
-      if (lastFrameData !== null) {
-        movement = Math.abs(currentFrameSummary - lastFrameData) / (totalPixels / 4);
-      }
-      lastFrameData = currentFrameSummary;
-
-      const isCardDetected = whiteRatio > 0.35;
-      const isStable = movement < 8.0;
-
-      if (isCardDetected && isStable) {
-        onCardDetectedAndStable();
+      const result = await response.json();
+      
+      if (result.success) {
+        document.getElementById('displayReceipt').innerText = result.receiptNumber;
+        showView('view-success');
       } else {
-        onCardLost();
+        throw new Error(result.error);
       }
+    } catch (error) {
+      alert("通信エラーが発生しました: " + error.message);
+      // エラー時はボタンを復活させる
+      document.getElementById('actionButtons').style.display = 'block';
+      document.getElementById('loadingMsg').style.display = 'none';
     }
+  }
+</script>
 
-    function onCardDetectedAndStable() {
-      const now = Date.now();
-      if (!holdStartTime) {
-        holdStartTime = now;
-      }
-
-      const elapsedTime = now - holdStartTime;
-      const progress = Math.min(elapsedTime / HOLD_DURATION_MS, 1.0);
-
-      guideFrame.classList.add('guide-success');
-      countdownOverlay.classList.remove('opacity-0');
-      
-      const offset = CIRCLE_CIRCUMFERENCE - (progress * CIRCLE_CIRCUMFERENCE);
-      progressCircle.style.strokeDashoffset = offset;
-
-      statusMessage.textContent = 'そのまま動かさないでください...';
-      statusMessage.className = 'text-sm text-emerald-400 font-semibold mt-1 animate-pulse';
-
-      if (elapsedTime >= HOLD_DURATION_MS && !isCapturing) {
-        takePhoto();
-      }
-    }
-
-    function onCardLost() {
-      holdStartTime = null;
-      guideFrame.classList.remove('guide-success');
-      countdownOverlay.classList.add('opacity-0');
-      progressCircle.style.strokeDashoffset = CIRCLE_CIRCUMFERENCE;
-
-      if (!isCapturing) {
-        statusMessage.textContent = isDemoMode ? '【デモモード】名刺が近づいて自動撮影されます' : '名刺を枠内にかざしてください';
-        statusMessage.className = 'text-sm text-slate-400 mt-1';
-      }
-    }
-
-    // 自動シャッター切り替え処理
-    function takePhoto() {
-      if (isCapturing) return;
-      isCapturing = true;
-
-      playShutterSound();
-
-      // フラッシュ演出
-      const flash = document.createElement('div');
-      flash.className = 'fixed inset-0 bg-white z-50 transition-opacity duration-300';
-      document.body.appendChild(flash);
-      setTimeout(() => flash.style.opacity = '0', 50);
-      setTimeout(() => flash.remove(), 350);
-
-      statusMessage.textContent = '撮影完了！画像をご確認ください';
-
-      const saveCanvas = document.createElement('canvas');
-      const source = isDemoMode ? activeDemoCanvas : video;
-      
-      saveCanvas.width = source.videoWidth || source.width || 640;
-      saveCanvas.height = source.videoHeight || source.height || 480;
-      
-      const saveCtx = saveCanvas.getContext('2d');
-      saveCtx.drawImage(source, 0, 0, saveCanvas.width, saveCanvas.height);
-
-      lastCapturedDataUrl = saveCanvas.toDataURL('image/jpeg', 0.92);
-
-      setTimeout(() => {
-        showResultModal(lastCapturedDataUrl);
-      }, 300);
-    }
-
-    function showResultModal(dataUrl) {
-      const modal = document.getElementById('resultModal');
-      const previewImg = document.getElementById('previewImage');
-      const uploadStatus = document.getElementById('uploadStatus');
-      const saveBtn = document.getElementById('saveBtn');
-
-      previewImg.src = dataUrl;
-      uploadStatus.classList.add('hidden');
-      uploadStatus.textContent = '';
-      saveBtn.disabled = false;
-      saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-
-      modal.classList.remove('hidden');
-      setTimeout(() => {
-        modal.classList.remove('opacity-0');
-      }, 10);
-    }
-
-    // 保存実行処理（GAS側のDrive/シート書き込み関数 saveRecord を実行）
-    function confirmAndSavePhoto() {
-      if (!lastCapturedDataUrl) return;
-
-      const saveBtn = document.getElementById('saveBtn');
-      const uploadStatus = document.getElementById('uploadStatus');
-
-      uploadStatus.classList.remove('hidden');
-      saveBtn.disabled = true;
-      saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
-      uploadStatus.className = "mt-3 text-xs font-medium text-blue-400 animate-pulse";
-      uploadStatus.textContent = "Googleドライブに保存中...";
-
-      // GAS内部環境での実行 (google.script.run)
-      if (typeof google !== 'undefined' && google && google.script && google.script.run) {
-        google.script.run
-          .withSuccessHandler((res) => {
-            uploadStatus.className = "mt-3 text-xs font-semibold text-emerald-400";
-            uploadStatus.textContent = "✓ 保存が完了しました！ (受付番号: " + (res.receiptNumber || '完了') + ")";
-            setTimeout(() => {
-              closeResultModal();
-            }, 1500);
-          })
-          .withFailureHandler((err) => {
-            console.error('Save Error:', err);
-            uploadStatus.className = "mt-3 text-xs font-semibold text-rose-400 p-2 bg-rose-950/50 rounded-lg border border-rose-800/50";
-            uploadStatus.textContent = "保存エラー: " + (err.message || err);
-            saveBtn.disabled = false;
-            saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-          })
-          .saveRecord(lastCapturedDataUrl);
-      } else {
-        // デモ／ローカル確認時の擬似応答
-        setTimeout(() => {
-          uploadStatus.className = "mt-3 text-xs font-semibold text-emerald-400";
-          uploadStatus.textContent = "✓ 【テスト動作】Googleドライブに保存しました";
-          setTimeout(() => { closeResultModal(); }, 1200);
-        }, 800);
-      }
-    }
-
-    function retakePhoto() {
-      closeResultModal();
-    }
-
-    function closeResultModal() {
-      const modal = document.getElementById('resultModal');
-      modal.classList.add('opacity-0');
-      setTimeout(() => {
-        modal.classList.add('hidden');
-        isCapturing = false;
-        holdStartTime = null;
-        countdownOverlay.classList.add('opacity-0');
-        statusMessage.textContent = isDemoMode ? '【デモモード】名刺が近づいて自動撮影されます' : '名刺を枠内にかざしてください';
-        statusMessage.className = "text-sm text-slate-400 mt-1";
-      }, 300);
-    }
-
-    function playShutterSound() {
-      try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(220, audioCtx.currentTime + 0.08);
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.08);
-      } catch (e) {}
-    }
-
-    window.onload = initCamera;
-  </script>
 </body>
 </html>
