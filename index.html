@@ -2,189 +2,310 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>来校者受付</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>来客受付</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- OpenCV.js for real-time card edge detection -->
+  <script async src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.9.0-release.3/opencv.js" onload="onOpenCvReady()"></script>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9f9f9; color: #333; text-align: center; margin: 0; padding: 20px; }
-    .container { max-width: 500px; margin: 0 auto; background: #fff; padding: 30px 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-    h1 { font-size: 22px; margin-bottom: 30px; color: #2c3e50; }
+    /* Guide Overlay Line Animations */
+    .scan-line {
+      position: absolute;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+      animation: scan 2s linear infinite;
+    }
+    @keyframes scan {
+      0% { top: 0%; }
+      100% { top: 100%; }
+    }
     
-    /* 画面切り替え用 */
-    .view { display: none; }
-    .view.active { display: block; }
-
-    /* ボタン */
-    .btn { display: block; width: 100%; padding: 18px; margin-bottom: 15px; font-size: 18px; font-weight: bold; color: #fff; background: #3498db; border: none; border-radius: 8px; cursor: pointer; text-decoration: none; box-sizing: border-box; }
-    .btn-secondary { background: #95a5a6; }
-    .btn-success { background: #2ecc71; }
-    .btn:active { opacity: 0.8; }
-
-    /* カメラとプレビュー */
-    #videoArea { width: 100%; max-width: 400px; border-radius: 8px; margin-bottom: 20px; background: #000; }
-    #previewImg { width: 100%; max-width: 400px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; }
-    
-    /* 受付完了画面 */
-    .receipt-box { background: #e8f8f5; border: 2px dashed #1abc9c; padding: 20px; border-radius: 8px; margin: 20px 0; }
-    .receipt-number { font-size: 32px; font-weight: bold; color: #16a085; letter-spacing: 2px; margin: 10px 0; }
-    
-    .loading { font-size: 18px; color: #e67e22; font-weight: bold; margin-bottom: 20px; }
+    /* Countdown Circle Progress */
+    .progress-ring__circle {
+      transition: stroke-dashoffset 0.1s linear;
+      transform: rotate(-90deg);
+      transform-origin: 50% 50%;
+    }
   </style>
 </head>
-<body>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col items-center justify-between p-4 font-sans">
 
-<div class="container">
-  
-  <!-- 1. トップ画面 -->
-  <div id="view-home" class="view active">
-    <h1>来校受付</h1>
-    <p style="margin-bottom: 30px; font-size: 16px;">名刺をお持ちですか？</p>
-    <button class="btn" onclick="startCamera()">名刺をスキャンする</button>
-    <button class="btn btn-secondary" onclick="alert('今回は名刺による受付のみ稼働しています。')">名刺をお持ちでない方はこちら</button>
-  </div>
+  <!-- Top Header -->
+  <header class="w-full max-w-lg text-center pt-2 pb-4">
+    <h1 class="text-2xl font-bold tracking-wide text-white">ご来訪受付</h1>
+    <p class="text-sm text-slate-400 mt-1" id="statusMessage">名刺を画面中央の枠内にかざしてください</p>
+  </header>
 
-  <!-- 2. カメラ撮影画面 -->
-  <div id="view-camera" class="view">
-    <h1>名刺を撮影してください</h1>
-    <!-- iOS対応のため playsinline が必須 -->
-    <video id="videoArea" autoplay playsinline></video>
-    <button class="btn" onclick="takePhoto()">撮影する</button>
-    <button class="btn btn-secondary" onclick="showView('view-home'); stopCamera();">戻る</button>
-  </div>
+  <!-- Camera Frame Section -->
+  <main class="relative w-full max-w-md aspect-[3/4] bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-700 flex items-center justify-center">
+    
+    <!-- Live Video Stream -->
+    <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover"></video>
+    
+    <!-- Hidden Canvas for OpenCV processing -->
+    <canvas id="processCanvas" class="hidden"></canvas>
 
-  <!-- 3. 確認画面 -->
-  <div id="view-preview" class="view">
-    <h1>この画像で受付しますか？</h1>
-    <img id="previewImg" src="" alt="プレビュー">
-    <div id="loadingMsg" class="loading" style="display: none;">送信中...そのままお待ちください</div>
-    <div id="actionButtons">
-      <button class="btn btn-success" onclick="submitData()">受付する</button>
-      <button class="btn btn-secondary" onclick="retakePhoto()">撮り直す</button>
+    <!-- Overlay Guide Box (Aspect ratio matches standard Business Card ~ 1.65:1) -->
+    <div id="guideBox" class="absolute w-[82%] h-[48%] border-2 border-dashed border-slate-400/80 rounded-lg flex flex-col justify-between p-2 transition-all duration-300 pointer-events-none">
+      <!-- Corner Markers -->
+      <div class="flex justify-between">
+        <div class="w-4 h-4 border-t-4 border-l-4 border-slate-200 rounded-tl"></div>
+        <div class="w-4 h-4 border-t-4 border-r-4 border-slate-200 rounded-tr"></div>
+      </div>
+
+      <!-- Scanning Beam Effect (Shows when detecting) -->
+      <div id="scanLine" class="scan-line hidden"></div>
+
+      <div class="flex justify-between">
+        <div class="w-4 h-4 border-b-4 border-l-4 border-slate-200 rounded-bl"></div>
+        <div class="w-4 h-4 border-b-4 border-r-4 border-slate-200 rounded-br"></div>
+      </div>
     </div>
-  </div>
 
-  <!-- 4. 完了画面 -->
-  <div id="view-success" class="view">
-    <h1>受付完了</h1>
-    <p>以下の番号で受付いたしました。</p>
-    <div class="receipt-box">
-      <div>受付番号</div>
-      <div class="receipt-number" id="displayReceipt">000000</div>
+    <!-- Countdown & Hold Animation Indicator -->
+    <div id="countdownOverlay" class="absolute inset-0 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center opacity-0 transition-opacity duration-200 pointer-events-none">
+      <div class="relative w-28 h-28 flex items-center justify-center">
+        <svg class="w-full h-full">
+          <circle class="text-slate-600" stroke-width="6" stroke="currentColor" fill="transparent" r="48" cx="56" cy="56"/>
+          <circle id="progressCircle" class="text-emerald-500 progress-ring__circle" stroke-width="6" stroke-dasharray="301.59" stroke-dashoffset="301.59" stroke-linecap="round" stroke="currentColor" fill="transparent" r="48" cx="56" cy="56"/>
+        </svg>
+        <span id="countdownText" class="absolute text-3xl font-bold text-white">動かさないでください</span>
+      </div>
+      <p class="text-emerald-400 font-semibold text-sm mt-3">自動撮影中...</p>
     </div>
-    <p>ありがとうございました。<br>担当者が参りますのでお待ちください。</p>
-    <button class="btn" style="margin-top:20px;" onclick="location.reload()">最初の画面に戻る</button>
-  </div>
 
-</div>
+    <!-- OpenCV Loading Spinner -->
+    <div id="cvLoading" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center gap-3">
+      <div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <p class="text-sm text-slate-300">カメラ検出エンジン起動中...</p>
+    </div>
+  </main>
 
-<!-- 画像処理用（非表示） -->
-<canvas id="canvas" style="display:none;"></canvas>
+  <!-- Bottom Actions -->
+  <footer class="w-full max-w-lg flex flex-col items-center gap-3 pb-4">
+    <div class="flex items-center gap-2 text-xs text-slate-400">
+      <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+      オートシャッターモード動作中
+    </div>
 
-<script>
-  // ==========================================
-  // 【重要】GASの「WebアプリのURL」をここに貼り付けます
-  // ==========================================
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbxTtiZZ4L9VLX_fm8bWv7Cgq0tZsaoibVRcit6H_uN5JC1YoM1FPnGOm-gCgI14OyB8wA/exec";
-  
-  let videoStream = null;
-  let capturedBase64 = "";
+    <!-- Manual Fallback Button in case auto fails -->
+    <button id="manualBtn" onclick="takePhoto()" class="w-full max-w-xs py-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold text-sm rounded-xl border border-slate-600 transition flex items-center justify-center gap-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h0.93a2 2 0 001.664-.89l0.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l0.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+      手動で撮影する
+    </button>
+  </footer>
 
-  // 画面切り替え制御
-  function showView(viewId) {
-    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-    document.getElementById(viewId).classList.add('active');
-  }
+  <script>
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('processCanvas');
+    const guideBox = document.getElementById('guideBox');
+    const scanLine = document.getElementById('scanLine');
+    const statusMessage = document.getElementById('statusMessage');
+    const countdownOverlay = document.getElementById('countdownOverlay');
+    const progressCircle = document.getElementById('progressCircle');
+    const cvLoading = document.getElementById('cvLoading');
 
-  // カメラ起動
-  async function startCamera() {
-    showView('view-camera');
-    const video = document.getElementById('videoArea');
-    try {
-      // 背面カメラを優先
-      const constraints = { video: { facingMode: "environment" } };
-      videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-      video.srcObject = videoStream;
-    } catch (err) {
-      alert("カメラの起動に失敗しました。ブラウザのカメラ許可設定をご確認ください。");
-      showView('view-home');
-    }
-  }
+    let cvReady = false;
+    let isCapturing = false;
+    let holdStartTime = null;
+    const HOLD_DURATION_MS = 1200; // 枠内で静止したとみなす時間(ミリ秒)
+    const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * 48;
 
-  // カメラ停止
-  function stopCamera() {
-    if (videoStream) {
-      videoStream.getTracks().forEach(track => track.stop());
-      videoStream = null;
-    }
-  }
-
-  // 撮影処理
-  function takePhoto() {
-    const video = document.getElementById('videoArea');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-
-    // 画像サイズを最大1024pxに抑える（送信速度向上とGASの制限回避のため）
-    const MAX_WIDTH = 1024;
-    let width = video.videoWidth;
-    let height = video.videoHeight;
-    
-    if (width > MAX_WIDTH) {
-      height = Math.floor(height * (MAX_WIDTH / width));
-      width = MAX_WIDTH;
-    }
-
-    canvas.width = width;
-    canvas.height = height;
-    ctx.drawImage(video, 0, 0, width, height);
-
-    // JPEG形式で圧縮率0.7でBase64化
-    capturedBase64 = canvas.toDataURL("image/jpeg", 0.7);
-    
-    document.getElementById('previewImg').src = capturedBase64;
-    stopCamera();
-    showView('view-preview');
-  }
-
-  // 撮り直し
-  function retakePhoto() {
-    capturedBase64 = "";
-    startCamera();
-  }
-
-  // GASへデータ送信
-  async function submitData() {
-    if (!capturedBase64) return;
-    
-    document.getElementById('actionButtons').style.display = 'none';
-    document.getElementById('loadingMsg').style.display = 'block';
-
-    try {
-      // CORS対策として fetch の挙動を調整。
-      // content-typeを text/plain にすることでプリフライト(OPTIONS)リクエストを回避し、GASへ送信可能にする。
-      const response = await fetch(GAS_URL, {
-        method: "POST",
-        body: JSON.stringify({ image: capturedBase64 }),
-        headers: {
-          "Content-Type": "text/plain" 
-        }
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        document.getElementById('displayReceipt').innerText = result.receiptNumber;
-        showView('view-success');
-      } else {
-        throw new Error(result.error);
+    // 1. Initialize Camera
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
+        video.srcObject = stream;
+        video.onloadedmetadata = () => {
+          video.play();
+          requestAnimationFrame(processVideoFrame);
+        };
+      } catch (err) {
+        alert('カメラへのアクセスが拒否されたか、カメラが見つかりません。');
       }
-    } catch (error) {
-      alert("通信エラーが発生しました: " + error.message);
-      // エラー時はボタンを復活させる
-      document.getElementById('actionButtons').style.display = 'block';
-      document.getElementById('loadingMsg').style.display = 'none';
     }
-  }
-</script>
 
+    // 2. OpenCV Ready Callback
+    function onOpenCvReady() {
+      cvReady = true;
+      cvLoading.classList.add('hidden');
+      statusMessage.textContent = '名刺を画面中央の枠内にかざしてください';
+    }
+
+    // 3. Main Auto-Detection Loop
+    function processVideoFrame() {
+      if (!isCapturing && cvReady && video.readyState === video.HAVE_ENOUGH_DATA) {
+        detectCardInGuide();
+      }
+      requestAnimationFrame(processVideoFrame);
+    }
+
+    // 4. OpenCV Card Detection in Guide ROI
+    function detectCardInGuide() {
+      const vWidth = video.videoWidth;
+      const vHeight = video.videoHeight;
+      if (vWidth === 0 || vHeight === 0) return;
+
+      canvas.width = vWidth;
+      canvas.height = vHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, vWidth, vHeight);
+
+      // ROI (Region of Interest) calculation matching guide box
+      const roiWidth = vWidth * 0.8;
+      const roiHeight = vHeight * 0.45;
+      const roiX = (vWidth - roiWidth) / 2;
+      const roiY = (vHeight - roiHeight) / 2;
+
+      try {
+        let src = cv.imread(canvas);
+        let rect = new cv.Rect(roiX, roiY, roiWidth, roiHeight);
+        let roi = src.roi(rect);
+
+        // Preprocessing: Grayscale -> Gaussian Blur -> Canny Edge
+        let gray = new cv.Mat();
+        let blurred = new cv.Mat();
+        let edges = new cv.Mat();
+
+        cv.cvtColor(roi, gray, cv.COLOR_RGBA2GRAY);
+        cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+        cv.Canny(blurred, edges, 50, 150);
+
+        // Find contours
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+        let cardFound = false;
+        const roiArea = roiWidth * roiHeight;
+
+        for (let i = 0; i < contours.size(); ++i) {
+          let cnt = contours.get(i);
+          let area = cv.contourArea(cnt);
+          
+          // Check if contour occupies at least 35% of guide box area
+          if (area > roiArea * 0.35) {
+            let peri = cv.arcLength(cnt, true);
+            let approx = new cv.Mat();
+            cv.approxPolyDP(cnt, approx, 0.04 * peri, true);
+
+            // Card typically has 4 corner vertices
+            if (approx.rows === 4) {
+              cardFound = true;
+              approx.delete();
+              break;
+            }
+            approx.delete();
+          }
+        }
+
+        // Clean up memory
+        src.delete(); roi.delete(); gray.delete(); blurred.delete(); edges.delete();
+        contours.delete(); hierarchy.delete();
+
+        handleDetectionResult(cardFound);
+
+      } catch (e) {
+        // Fallback or ignore frame errors
+      }
+    }
+
+    // 5. Detection Feedback & Auto Trigger
+    function handleDetectionResult(found) {
+      if (found) {
+        // UI feedback when detected
+        guideBox.classList.remove('border-slate-400/80');
+        guideBox.classList.add('border-emerald-400', 'shadow-[0_0_20px_rgba(52,211,153,0.5)]');
+        scanLine.classList.remove('hidden');
+        statusMessage.textContent = '名刺を固定してください...';
+        statusMessage.className = "text-sm text-emerald-400 font-semibold mt-1";
+
+        // Progress timer
+        if (!holdStartTime) holdStartTime = Date.now();
+        const elapsedTime = Date.now() - holdStartTime;
+        const progress = Math.min(elapsedTime / HOLD_DURATION_MS, 1);
+
+        // Countdown visual update
+        countdownOverlay.classList.remove('opacity-0');
+        const offset = CIRCLE_CIRCUMFERENCE - (progress * CIRCLE_CIRCUMFERENCE);
+        progressCircle.style.strokeDashoffset = offset;
+
+        // Trigger Auto-Capture
+        if (elapsedTime >= HOLD_DURATION_MS) {
+          takePhoto();
+        }
+      } else {
+        // Reset when card is lost or unstable
+        holdStartTime = null;
+        guideBox.classList.remove('border-emerald-400', 'shadow-[0_0_20px_rgba(52,211,153,0.5)]');
+        guideBox.classList.add('border-slate-400/80');
+        scanLine.classList.add('hidden');
+        countdownOverlay.classList.add('opacity-0');
+        statusMessage.textContent = '名刺を画面中央の枠内にかざしてください';
+        statusMessage.className = "text-sm text-slate-400 mt-1";
+      }
+    }
+
+    // 6. Capture Action
+    function takePhoto() {
+      if (isCapturing) return;
+      isCapturing = true;
+
+      // Play shutter sound via Web Audio API
+      playShutterSound();
+
+      // Flash Effect
+      const flash = document.createElement('div');
+      flash.className = 'fixed inset-0 bg-white z-50 transition-opacity duration-300';
+      document.body.appendChild(flash);
+      setTimeout(() => flash.style.opacity = '0', 50);
+      setTimeout(() => flash.remove(), 350);
+
+      // Final Capture from video stream
+      const finalCanvas = document.createElement('canvas');
+      finalCanvas.width = video.videoWidth;
+      finalCanvas.height = video.videoHeight;
+      const ctx = finalCanvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+
+      const base64Image = finalCanvas.toDataURL('image/jpeg', 0.85);
+
+      statusMessage.textContent = '受付データを送信中...';
+
+      // Send base64Image to Google Apps Script (doPost)
+      setTimeout(() => {
+        alert('名刺の撮影が完了しました！受付を行いました。');
+        // Reset for next visitor
+        isCapturing = false;
+        holdStartTime = null;
+        countdownOverlay.classList.add('opacity-0');
+      }, 800);
+    }
+
+    // Simple Synthesizer Shutter Sound Effect
+    function playShutterSound() {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(120, audioCtx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.08);
+      } catch (e) {}
+    }
+
+    // Start system on page load
+    window.onload = initCamera;
+  </script>
 </body>
 </html>
