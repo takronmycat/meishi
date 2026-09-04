@@ -34,7 +34,11 @@
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between items-center p-4 selection:bg-blue-500 selection:text-white">
 
   <!-- ヘッダー -->
-  <header class="w-full max-w-lg text-center pt-2 pb-3">
+  <header class="w-full max-w-lg text-center pt-2 pb-3 relative">
+    <button onclick="openConfigModal()" class="absolute right-0 top-2 p-2 text-slate-400 hover:text-white bg-slate-900 border border-slate-800 rounded-xl transition flex items-center gap-1 text-xs" title="Googleドライブ連携設定">
+      <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      設定
+    </button>
     <div class="inline-flex items-center gap-2 px-3 py-1 bg-slate-900 border border-slate-800 rounded-full mb-2">
       <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
       <span class="text-xs font-semibold text-slate-300">受付用 名刺自動スキャナー</span>
@@ -57,76 +61,76 @@
         <div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
         <p class="text-sm text-slate-300 font-medium">カメラを起動中...</p>
         <button onclick="startDemoMode()" class="mt-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-blue-400 rounded-lg border border-slate-700 transition">
-          カメラが起動しない場合（デモモードで試す）
-        </button>
-      </div>
-
-      <!-- 暗調オーバーレイ (枠外を少し暗くする) -->
-      <div class="absolute inset-0 pointer-events-none border-[24px] sm:border-[32px] border-slate-950/60 z-10"></div>
-
-      <!-- 名刺ガイド枠 (横型名刺比率 1.6:1) -->
-      <div id="guideFrame" class="absolute w-[78%] aspect-[1.6/1] border-2 border-blue-500/80 rounded-xl guide-pulse z-20 flex flex-col justify-between p-2 transition-all duration-300">
-        <!-- コーナーアクセント -->
-        <div class="flex justify-between">
-          <div class="w-4 h-4 border-t-2 border-l-2 border-white/80 rounded-tl"></div>
-          <div class="w-4 h-4 border-t-2 border-r-2 border-white/80 rounded-tr"></div>
-        </div>
-        
-        <!-- 中央ガイダンスアイコン & カウントダウン表示 -->
-        <div id="guideContent" class="flex flex-col items-center justify-center text-center">
-          <!-- 自動撮影用プログレスリング -->
-          <div id="countdownOverlay" class="relative w-16 h-16 flex items-center justify-center opacity-0 transition-opacity duration-200">
-            <svg class="w-16 h-16">
-              <circle class="text-slate-700/50" stroke-width="4" stroke="currentColor" fill="transparent" r="28" cx="32" cy="32"/>
-              <circle id="progressCircle" class="text-emerald-400 progress-ring__circle" stroke-width="4" stroke-dasharray="176" stroke-dashoffset="176" stroke-linecap="round" stroke="currentColor" fill="transparent" r="28" cx="32" cy="32"/>
-            </svg>
-            <span id="countdownText" class="absolute text-emerald-400 font-bold text-xs">静止中</span>
-          </div>
-        </div>
-
-        <div class="flex justify-between">
-          <div class="w-4 h-4 border-b-2 border-l-2 border-white/80 rounded-bl"></div>
-          <div class="w-4 h-4 border-b-2 border-r-2 border-white/80 rounded-br"></div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- 内部計算解析用隠しキャンバス -->
-    <canvas id="analysisCanvas" class="hidden"></canvas>
-  </main>
-
-  <!-- フッター操作エリア -->
-  <footer class="w-full max-w-lg mt-4 mb-2 flex flex-col items-center gap-2">
-    <!-- 手動撮影ボタン -->
-    <button id="manualBtn" onclick="takePhoto()" class="w-full max-w-xs py-3.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold text-sm rounded-xl border border-slate-700 shadow-lg transition flex items-center justify-center gap-2">
-      <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h0.93a2 2 0 001.664-.89l0.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l0.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
-      手動で撮影する
-    </button>
-  </footer>
-
-  <!-- 撮影画像確認・保存モーダル -->
-  <div id="resultModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 hidden opacity-0 transition-opacity duration-300">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 text-center shadow-2xl flex flex-col items-center">
-      <div class="w-10 h-10 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center mb-3">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-      </div>
-      <h3 class="text-lg font-bold text-white mb-1">この画像でよろしいですか？</h3>
-      <p class="text-xs text-slate-400 mb-4">ブレや反射、文字の見切れがないかご確認ください</p>
-      
-      <!-- Preview of captured card -->
-      <div class="w-full aspect-[1.6/1] bg-black rounded-lg overflow-hidden border border-slate-700 mb-4 shadow-md">
-        <img id="previewImage" class="w-full h-full object-contain" alt="撮影された名刺">
-      </div>
-
-      <div class="w-full flex gap-2">
+      <div class="w-full flex gap-2" id="modalButtons">
         <button onclick="retakePhoto()" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-xl text-slate-200 border border-slate-600 transition flex items-center justify-center gap-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           撮り直す
         </button>
-        <button onclick="confirmAndSavePhoto()" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-xs font-bold rounded-xl text-white shadow-lg transition flex items-center justify-center gap-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-          OK（保存する）
+        <button id="saveBtn" onclick="confirmAndSavePhoto()" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-xs font-bold rounded-xl text-white shadow-lg transition flex items-center justify-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+          Driveに送信
+        </button>
+      </div>
+      <div id="uploadStatus" class="mt-3 text-xs font-medium text-slate-300 hidden"></div>
+    </div>
+  </div>
+
+  <!-- Googleドライブ設定モーダル -->
+  <div id="configModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50 hidden opacity-0 transition-opacity duration-300">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 text-left shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4 0-2.05 1.53-3.76 3.56-3.97l1.07-.11.5-.95C8.08 7.14 9.94 6 12 6c2.62 0 4.88 1.86 5.39 4.43l.3 1.5 1.53.11c1.56.1 2.78 1.41 2.78 2.96 0 1.65-1.35 3-3 3z"/></svg>
+          Googleドライブ設定
+        </h3>
+        <button onclick="closeConfigModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+      </div>
+
+      <p class="text-xs text-slate-300 mb-3">
+        Google Apps Script (GAS) のWeb App URLを設定すると、名刺画像がGoogleドライブに直接アップロードされます。
+      </p>
+
+      <div class="mb-4">
+        <label class="block text-xs font-semibold text-slate-300 mb-1">GAS Web App URL</label>
+        <input type="text" id="gasUrlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-blue-500">
+      </div>
+
+      <!-- GAS スクリプトコピーエリア -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 mb-4">
+        <div class="flex justify-between items-center mb-1.5">
+          <span class="text-[11px] font-bold text-slate-400">作成手順 & GASコード</span>
+          <button onclick="copyGasCode()" class="text-[10px] bg-slate-800 hover:bg-slate-700 text-blue-400 px-2 py-1 rounded border border-slate-700">コードをコピー</button>
+        </div>
+        <ol class="text-[11px] text-slate-400 list-decimal list-inside space-y-1 mb-2">
+          <li>Googleドライブで「新規」→「その他」→「Google Apps Script」を開く</li>
+          <li>以下のコードを貼り付けて保存する</li>
+          <li>「デプロイ」→「新しいデプロイ」でアクセスできるユーザーを「全員」にしてデプロイする</li>
+          <li>発行されたWeb App URLを上の入力欄に貼り付ける</li>
+        </ol>
+        <pre id="gasCodeText" class="bg-slate-900 p-2 rounded text-[10px] text-emerald-400 overflow-x-auto border border-slate-800">
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var base64Data = data.image.replace(/^data:image\/(png|jpeg);base64,/, "");
+    var blob = Utilities.newBlob(Utilities.base64Decode(base64Data), 'image/jpeg', data.fileName);
+    
+    // 特定のフォルダIDを指定（空の場合はマイドライブ直下）
+    var folderId = ""; 
+    var folder = folderId ? DriveApp.getFolderById(folderId) : DriveApp.getRootFolder();
+    var file = folder.createFile(blob);
+    
+    return ContentService.createTextOutput(JSON.stringify({result: "success", url: file.getUrl()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({result: "error", error: err.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}</pre>
+      </div>
+
+      <div class="flex gap-2">
+        <button onclick="saveGasConfig()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white rounded-xl transition">
+          設定を保存する
         </button>
       </div>
     </div>
@@ -150,6 +154,7 @@
     let demoProgress = 0;
     let activeDemoCanvas = null;
     let lastCapturedDataUrl = null;
+    let gasWebAppUrl = localStorage.getItem('gas_web_app_url') || '';
 
     const HOLD_DURATION_MS = 1000; // 1秒間静止で自動撮影
     const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * 28; // プログレスリングの円周 (r=28)
@@ -391,8 +396,14 @@
     function showResultModal(dataUrl) {
       const modal = document.getElementById('resultModal');
       const previewImg = document.getElementById('previewImage');
+      const uploadStatus = document.getElementById('uploadStatus');
+      const saveBtn = document.getElementById('saveBtn');
 
       previewImg.src = dataUrl;
+      uploadStatus.classList.add('hidden');
+      uploadStatus.textContent = '';
+      saveBtn.disabled = false;
+      saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
 
       modal.classList.remove('hidden');
       setTimeout(() => {
@@ -400,12 +411,105 @@
       }, 10);
     }
 
-    // 「OK（保存する）」が押された時
-    function confirmAndSavePhoto() {
-      if (lastCapturedDataUrl) {
-        saveImageToDrive(lastCapturedDataUrl);
+    // 「OK（保存する / Driveに送信）」が押された時
+    async function confirmAndSavePhoto() {
+      if (!lastCapturedDataUrl) return;
+
+      const saveBtn = document.getElementById('saveBtn');
+      const uploadStatus = document.getElementById('uploadStatus');
+
+      // GAS URLが設定されていない場合は設定画面を案内してローカル保存にフォールバック
+      if (!gasWebAppUrl) {
+        if (confirm("Googleドライブ連携用URLが未設定です。\n設定画面を開きますか？\n（キャンセルを選ぶとスマホ本体に保存されます）")) {
+          openConfigModal();
+        } else {
+          saveImageLocally(lastCapturedDataUrl);
+          closeResultModal();
+        }
+        return;
       }
-      closeResultModal();
+
+      // アップロード実行UIの表示
+      saveBtn.disabled = true;
+      saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      uploadStatus.classList.remove('hidden');
+      uploadStatus.className = "mt-3 text-xs font-medium text-blue-400 animate-pulse";
+      uploadStatus.textContent = "Googleドライブに送信中...";
+
+      try {
+        const dateStr = new Date().toISOString().replace(/[:.-]/g, "").slice(0, 15);
+        const fileName = `名刺_${dateStr}.jpg`;
+
+        const response = await fetch(gasWebAppUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' }, // CORS回避用
+          body: JSON.stringify({
+            image: lastCapturedDataUrl,
+            fileName: fileName
+          })
+        });
+
+        const result = await response.json();
+        if (result.result === 'success') {
+          uploadStatus.className = "mt-3 text-xs font-semibold text-emerald-400";
+          uploadStatus.textContent = "✓ Googleドライブに保存しました！";
+          setTimeout(() => {
+            closeResultModal();
+          }, 1500);
+        } else {
+          throw new Error(result.error || '送信エラー');
+        }
+      } catch (err) {
+        console.error('Google Drive Upload Error:', err);
+        uploadStatus.className = "mt-3 text-xs font-semibold text-rose-400";
+        uploadStatus.textContent = "アップロードに失敗しました。URLをご確認ください。";
+        saveBtn.disabled = false;
+        saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+
+    // ローカル保存フォールバック
+    function saveImageLocally(dataUrl) {
+      const dateStr = new Date().toISOString().replace(/[:.-]/g, "").slice(0, 15);
+      const fileName = `名刺_${dateStr}.jpg`;
+
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // 設定モーダルの開閉
+    function openConfigModal() {
+      const modal = document.getElementById('configModal');
+      document.getElementById('gasUrlInput').value = gasWebAppUrl;
+      modal.classList.remove('hidden');
+      setTimeout(() => modal.classList.remove('opacity-0'), 10);
+    }
+
+    function closeConfigModal() {
+      const modal = document.getElementById('configModal');
+      modal.classList.add('opacity-0');
+      setTimeout(() => modal.classList.add('hidden'), 300);
+    }
+
+    function saveGasConfig() {
+      const url = document.getElementById('gasUrlInput').value.trim();
+      gasWebAppUrl = url;
+      localStorage.setItem('gas_web_app_url', url);
+      alert('Googleドライブ設定を保存しました');
+      closeConfigModal();
+    }
+
+    function copyGasCode() {
+      const code = document.getElementById('gasCodeText').innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        alert('GASコードをクリップボードにコピーしました');
+      }).catch(() => {
+        document.execCommand('copy');
+      });
     }
 
     // 「撮り直す」が押された時
