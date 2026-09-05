@@ -100,7 +100,7 @@
     const video = document.getElementById('videoArea');
     try {
       // 前面カメラを優先
-      const constraints = { video: { facingMode: "user" } };
+      const constraints = { video: { facingMode: "environment" } };
       videoStream = await navigator.mediaDevices.getUserMedia(constraints);
       video.srcObject = videoStream;
     } catch (err) {
