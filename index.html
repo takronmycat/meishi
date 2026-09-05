@@ -37,14 +37,14 @@
   <!-- 1. トップ画面 -->
   <div id="view-home" class="view active">
     <h1>来校受付</h1>
-    <p style="margin-bottom: 30px; font-size: 16px;">名刺orIDカードをお持ちですか？</p>
+    <p style="margin-bottom: 30px; font-size: 16px;">名刺 or IDカードをお持ちですか？</p>
     <button class="btn" onclick="startCamera()">スキャン</button>
     <button class="btn btn-secondary" onclick="alert('今回は名刺による受付のみ稼働しています。')">名刺をお持ちでない方はこちら</button>
   </div>
 
   <!-- 2. カメラ撮影画面 -->
   <div id="view-camera" class="view">
-    <h1>名刺orIDカードを撮影してください</h1>
+    <h1>カードを撮影してください</h1>
     <!-- iOS対応のため playsinline が必須 -->
     <video id="videoArea" autoplay playsinline></video>
     <button class="btn" onclick="takePhoto()">撮影する</button>
