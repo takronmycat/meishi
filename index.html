@@ -284,9 +284,14 @@
 
     // GAS URL設定表示更新
     function updateGasStatusDisplay() {
-      if (currentGasUrl) {
+      if (typeof google !== 'undefined' && google && google.script && google.script.run) {
+        gasStatusText.innerText = "GAS連携: 接続完了 (直接保存)";
+        gasStatusText.classList.replace("text-slate-400", "text-emerald-400");
+        gasStatusText.classList.replace("text-amber-400", "text-emerald-400");
+      } else if (currentGasUrl) {
         gasStatusText.innerText = "GAS送信先: 設定済み";
         gasStatusText.classList.replace("text-slate-400", "text-emerald-400");
+        gasStatusText.classList.replace("text-amber-400", "text-emerald-400");
       } else {
         gasStatusText.innerText = "GAS送信先: 未設定 (⚙️より設定してください)";
         gasStatusText.classList.replace("text-emerald-400", "text-amber-400");
@@ -502,22 +507,45 @@
     });
 
     saveBtn.addEventListener('click', async () => {
+      confirmModal.classList.add('hidden');
+      showLoading("Google Driveへ保存中...");
+
+      // 1. GAS内部実行環境（Code.gsのCONFIG設定値を直接使用）
+      if (typeof google !== 'undefined' && google && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler((result) => {
+            hideLoading();
+            if (result && result.success) {
+              receiptNumberText.innerText = result.receiptNumber || "000000";
+              successModal.classList.remove('hidden');
+            } else {
+              alert("保存エラー: " + ((result && result.error) || "送信に失敗しました"));
+              isScanning = true;
+            }
+          })
+          .withFailureHandler((err) => {
+            hideLoading();
+            console.error("GAS execution error:", err);
+            alert("保存処理中にエラーが発生しました: " + (err.message || err));
+            isScanning = true;
+          })
+          .saveRecord(capturedBase64Data);
+        return;
+      }
+
+      // 2. 外部WebAPI経由送信の場合
       if (!currentGasUrl) {
-        confirmModal.classList.add('hidden');
+        hideLoading();
         openSettingsModal();
         alert("送信先のGAS WebアプリURLが設定されていません。URLを設定してください。");
         return;
       }
 
-      confirmModal.classList.add('hidden');
-      showLoading("Google Driveへ保存中...");
-
       try {
-        // GASのdoPost(e)エンドポイントへJSONデータ送信
         const response = await fetch(currentGasUrl, {
           method: 'POST',
           headers: {
-            'Content-Type': 'text/plain;charset=utf-8' // CORSプリフライト回避のためtext/plain指定
+            'Content-Type': 'text/plain;charset=utf-8'
           },
           body: JSON.stringify({ image: capturedBase64Data })
         });
@@ -533,7 +561,7 @@
         }
       } catch (err) {
         console.error("Upload error:", err);
-        alert("通信エラーが発生しました。GAS URLをご確認ください。\n" + err.message);
+        alert("通信エラーが発生しました: " + err.message);
         isScanning = true;
       } finally {
         hideLoading();
