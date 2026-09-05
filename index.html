@@ -3,603 +3,188 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>来校者受付 - 名刺スキャナー</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <title>来校者受付</title>
   <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      touch-action: manipulation;
-      background-color: #0f172a;
-      color: #f8fafc;
-      overflow: hidden;
-    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9f9f9; color: #333; text-align: center; margin: 0; padding: 20px; }
+    .container { max-width: 500px; margin: 0 auto; background: #fff; padding: 30px 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    h1 { font-size: 22px; margin-bottom: 30px; color: #2c3e50; }
     
-    /* 横置き（1.6:1）名刺ガイド枠 */
-    .card-guide-box {
-      width: 75vw;
-      max-width: 560px;
-      aspect-ratio: 1.6 / 1;
-      border: 3px dashed rgba(255, 255, 255, 0.6);
-      border-radius: 16px;
-      position: relative;
-      transition: all 0.3s ease;
-      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
-    }
+    /* 画面切り替え用 */
+    .view { display: none; }
+    .view.active { display: block; }
 
-    .card-guide-box.detected {
-      border-color: #10b981;
-      border-style: solid;
-      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4), 0 0 25px rgba(16, 185, 129, 0.8);
-    }
+    /* ボタン */
+    .btn { display: block; width: 100%; padding: 18px; margin-bottom: 15px; font-size: 18px; font-weight: bold; color: #fff; background: #3498db; border: none; border-radius: 8px; cursor: pointer; text-decoration: none; box-sizing: border-box; }
+    .btn-secondary { background: #95a5a6; }
+    .btn-success { background: #2ecc71; }
+    .btn:active { opacity: 0.8; }
 
-    /* ガイドコーナー装飾 */
-    .corner {
-      position: absolute;
-      width: 24px;
-      height: 24px;
-      border-color: #3b82f6;
-      border-style: solid;
-    }
-    .corner-tl { top: -3px; left: -3px; border-width: 4px 0 0 4px; border-top-left-radius: 16px; }
-    .corner-tr { top: -3px; right: -3px; border-width: 4px 4px 0 0; border-top-right-radius: 16px; }
-    .corner-bl { bottom: -3px; left: -3px; border-width: 0 0 4px 4px; border-bottom-left-radius: 16px; }
-    .corner-br { bottom: -3px; right: -3px; border-width: 0 4px 4px 0; border-bottom-right-radius: 16px; }
-
-    .detected .corner {
-      border-color: #10b981;
-    }
-
-    /* スキャン線アニメーション */
-    .scan-line {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      background: linear-gradient(90deg, transparent, #10b981, transparent);
-      box-shadow: 0 0 8px #10b981;
-      animation: scan 2s infinite linear;
-      opacity: 0;
-    }
-    .detected .scan-line {
-      opacity: 1;
-    }
-
-    @keyframes scan {
-      0% { top: 0%; }
-      50% { top: 100%; }
-      100% { top: 0%; }
-    }
+    /* カメラとプレビュー */
+    #videoArea { width: 100%; max-width: 400px; border-radius: 8px; margin-bottom: 20px; background: #000; }
+    #previewImg { width: 100%; max-width: 400px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; }
+    
+    /* 受付完了画面 */
+    .receipt-box { background: #e8f8f5; border: 2px dashed #1abc9c; padding: 20px; border-radius: 8px; margin: 20px 0; }
+    .receipt-number { font-size: 32px; font-weight: bold; color: #16a085; letter-spacing: 2px; margin: 10px 0; }
+    
+    .loading { font-size: 18px; color: #e67e22; font-weight: bold; margin-bottom: 20px; }
   </style>
 </head>
-<body class="h-screen w-screen flex flex-col justify-between select-none">
+<body>
 
-  <header class="bg-slate-900/90 backdrop-blur border-b border-slate-800 px-6 py-3 flex items-center justify-between z-20">
-    <div class="flex items-center space-x-3">
-      <i class="fa-solid fa-address-card text-emerald-400 text-2xl"></i>
-      <div>
-        <h1 class="text-lg font-bold text-white leading-tight">来校者受付</h1>
-        <p class="text-xs text-slate-400">名刺スキャナー</p>
-      </div>
+<div class="container">
+  
+  <!-- 1. トップ画面 -->
+  <div id="view-home" class="view active">
+    <h1>来校受付</h1>
+    <p style="margin-bottom: 30px; font-size: 16px;">名刺をお持ちですか？</p>
+    <button class="btn" onclick="startCamera()">名刺をスキャンする</button>
+    <button class="btn btn-secondary" onclick="alert('今回は名刺による受付のみ稼働しています。')">名刺をお持ちでない方はこちら</button>
+  </div>
+
+  <!-- 2. カメラ撮影画面 -->
+  <div id="view-camera" class="view">
+    <h1>名刺を撮影してください</h1>
+    <!-- iOS対応のため playsinline が必須 -->
+    <video id="videoArea" autoplay playsinline></video>
+    <button class="btn" onclick="takePhoto()">撮影する</button>
+    <button class="btn btn-secondary" onclick="showView('view-home'); stopCamera();">戻る</button>
+  </div>
+
+  <!-- 3. 確認画面 -->
+  <div id="view-preview" class="view">
+    <h1>この画像で受付しますか？</h1>
+    <img id="previewImg" src="" alt="プレビュー">
+    <div id="loadingMsg" class="loading" style="display: none;">送信中...そのままお待ちください</div>
+    <div id="actionButtons">
+      <button class="btn btn-success" onclick="submitData()">受付する</button>
+      <button class="btn btn-secondary" onclick="retakePhoto()">撮り直す</button>
     </div>
+  </div>
 
-    <!-- カメラ選択・切り替え・設定コントローラー -->
-    <div class="flex items-center space-x-3">
-      <div class="relative flex items-center bg-slate-800 rounded-lg border border-slate-700 px-3 py-1.5">
-        <i class="fa-solid fa-camera text-slate-400 text-sm mr-2"></i>
-        <select id="cameraSelect" class="bg-transparent text-sm text-slate-200 focus:outline-none cursor-pointer pr-4">
-          <option value="">カメラ読み込み中...</option>
-        </select>
-      </div>
-
-      <button id="switchCameraBtn" class="bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 text-sm font-medium transition flex items-center space-x-2">
-        <i class="fa-solid fa-rotate text-emerald-400"></i>
-        <span class="hidden sm:inline">イン/アウト切替</span>
-      </button>
-
-      <button id="openSettingsBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-lg border border-slate-700 text-sm transition" title="GAS設定">
-        <i class="fa-solid fa-gear"></i>
-      </button>
+  <!-- 4. 完了画面 -->
+  <div id="view-success" class="view">
+    <h1>受付完了</h1>
+    <p>以下の番号で受付いたしました。</p>
+    <div class="receipt-box">
+      <div>受付番号</div>
+      <div class="receipt-number" id="displayReceipt">000000</div>
     </div>
-  </header>
+    <p>ありがとうございました。<br>担当者が参りますのでお待ちください。</p>
+    <button class="btn" style="margin-top:20px;" onclick="location.reload()">最初の画面に戻る</button>
+  </div>
 
-  <main class="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
-    <!-- カメラ映像 -->
-    <video id="webcam" autoplay playsinline muted class="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]"></video>
+</div>
+
+<!-- 画像処理用（非表示） -->
+<canvas id="canvas" style="display:none;"></canvas>
+
+<script>
+  // ==========================================
+  // 【重要】GASの「WebアプリのURL」をここに貼り付けます
+  // ==========================================
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxTtiZZ4L9VLX_fm8bWv7Cgq0tZsaoibVRcit6H_uN5JC1YoM1FPnGOm-gCgI14OyB8wA/exec";
+  
+  let videoStream = null;
+  let capturedBase64 = "";
+
+  // 画面切り替え制御
+  function showView(viewId) {
+    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+    document.getElementById(viewId).classList.add('active');
+  }
+
+  // カメラ起動
+  async function startCamera() {
+    showView('view-camera');
+    const video = document.getElementById('videoArea');
+    try {
+      // 背面カメラを優先
+      const constraints = { video: { facingMode: "environment" } };
+      videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = videoStream;
+    } catch (err) {
+      alert("カメラの起動に失敗しました。ブラウザのカメラ許可設定をご確認ください。");
+      showView('view-home');
+    }
+  }
+
+  // カメラ停止
+  function stopCamera() {
+    if (videoStream) {
+      videoStream.getTracks().forEach(track => track.stop());
+      videoStream = null;
+    }
+  }
+
+  // 撮影処理
+  function takePhoto() {
+    const video = document.getElementById('videoArea');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // 画像サイズを最大1024pxに抑える（送信速度向上とGASの制限回避のため）
+    const MAX_WIDTH = 1024;
+    let width = video.videoWidth;
+    let height = video.videoHeight;
     
-    <!-- 非表示キャンバス (画像解析・切り出し用) -->
-    <canvas id="analysisCanvas" class="hidden"></canvas>
-    <canvas id="captureCanvas" class="hidden"></canvas>
+    if (width > MAX_WIDTH) {
+      height = Math.floor(height * (MAX_WIDTH / width));
+      width = MAX_WIDTH;
+    }
 
-    <!-- オーバーレイガイド -->
-    <div class="relative z-10 flex flex-col items-center justify-center w-full h-full pointer-events-none p-4">
-      <div id="guideBox" class="card-guide-box flex items-center justify-center">
-        <div class="corner corner-tl"></div>
-        <div class="corner corner-tr"></div>
-        <div class="corner corner-bl"></div>
-        <div class="corner corner-br"></div>
-        <div class="scan-line"></div>
-        
-        <!-- 枠内カウントダウン表示 -->
-        <div id="countdownOverlay" class="text-6xl font-black text-emerald-400 drop-shadow-lg opacity-0 transform scale-50 transition-all duration-300">
-          3
-        </div>
-      </div>
+    canvas.width = width;
+    canvas.height = height;
+    ctx.drawImage(video, 0, 0, width, height);
 
-      <!-- ステータスガイドテキスト -->
-      <div id="statusMessage" class="mt-6 bg-slate-900/80 backdrop-blur border border-slate-700/80 text-slate-200 text-sm md:text-base font-medium px-6 py-2.5 rounded-full shadow-lg flex items-center space-x-3">
-        <i class="fa-solid fa-expand text-emerald-400 animate-pulse"></i>
-        <span>枠内に名刺を合わせて動かさずに提示してください</span>
-      </div>
-    </div>
+    // JPEG形式で圧縮率0.7でBase64化
+    capturedBase64 = canvas.toDataURL("image/jpeg", 0.7);
+    
+    document.getElementById('previewImg').src = capturedBase64;
+    stopCamera();
+    showView('view-preview');
+  }
 
-    <!-- 手動シャッターボタン (代替用) -->
-    <button id="manualCaptureBtn" class="absolute bottom-6 right-6 z-20 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white p-4 rounded-full shadow-xl transition flex items-center justify-center border-2 border-emerald-400">
-      <i class="fa-solid fa-camera text-2xl"></i>
-    </button>
-  </main>
+  // 撮り直し
+  function retakePhoto() {
+    capturedBase64 = "";
+    startCamera();
+  }
 
-  <footer class="bg-slate-900 border-t border-slate-800 px-6 py-2 text-xs text-slate-500 flex justify-between items-center z-20">
-    <div class="flex items-center space-x-2">
-      <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-      <span>自動検出エンジン動作中</span>
-    </div>
-    <div id="gasStatusText" class="text-slate-400 truncate max-w-xs">
-      GAS送信先: 未設定
-    </div>
-  </footer>
+  // GASへデータ送信
+  async function submitData() {
+    if (!capturedBase64) return;
+    
+    document.getElementById('actionButtons').style.display = 'none';
+    document.getElementById('loadingMsg').style.display = 'block';
 
-  <div id="confirmModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl flex flex-col items-center">
-      <div class="flex items-center space-x-2 text-emerald-400 mb-2">
-        <i class="fa-solid fa-circle-check text-xl"></i>
-        <h2 class="text-xl font-bold text-white">この画像でよろしいですか？</h2>
-      </div>
-      <p class="text-slate-400 text-sm mb-4">文字が鮮明に写っているかご確認ください</p>
-
-      <!-- 撮影画像プレビュー (横長) -->
-      <div class="w-full bg-slate-950 rounded-xl overflow-hidden border border-slate-800 mb-6 flex items-center justify-center shadow-inner">
-        <img id="previewImage" class="w-full h-auto max-h-[50vh] object-contain" src="" alt="名刺撮影画像">
-      </div>
-
-      <!-- アクションボタン -->
-      <div class="flex space-x-4 w-full">
-        <button id="retakeBtn" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 py-3.5 px-4 rounded-xl font-bold transition flex items-center justify-center space-x-2 border border-slate-700">
-          <i class="fa-solid fa-arrow-rotate-left"></i>
-          <span>撮り直す</span>
-        </button>
-        <button id="saveBtn" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3.5 px-4 rounded-xl font-bold transition flex items-center justify-center space-x-2 shadow-lg shadow-emerald-900/40 border border-emerald-400">
-          <i class="fa-solid fa-cloud-arrow-up"></i>
-          <span>保存する</span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <div id="successModal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-8 shadow-2xl flex flex-col items-center text-center">
-      <div class="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center text-emerald-400 text-3xl mb-4">
-        <i class="fa-solid fa-check"></i>
-      </div>
-      <h2 class="text-2xl font-bold text-white mb-1">受付が完了しました</h2>
-      <p class="text-slate-400 text-sm mb-6">ご来校ありがとうございます</p>
-
-      <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 w-full mb-6">
-        <span class="text-xs text-slate-500 block mb-1">受付番号</span>
-        <span id="receiptNumberText" class="text-4xl font-black text-emerald-400 tracking-wider">000000</span>
-      </div>
-
-      <button id="nextVisitorBtn" class="w-full bg-slate-800 hover:bg-slate-700 text-white py-3 px-4 rounded-xl font-bold transition">
-        次の受付へ
-      </button>
-    </div>
-  </div>
-
-  <div id="settingsModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-bold text-white flex items-center space-x-2">
-          <i class="fa-solid fa-gear text-slate-400"></i>
-          <span>GAS設定</span>
-        </h3>
-        <button id="closeSettingsBtn" class="text-slate-400 hover:text-white p-1">
-          <i class="fa-solid fa-xmark text-lg"></i>
-        </button>
-      </div>
-      <p class="text-slate-400 text-xs mb-4">
-        デプロイしたGoogle Apps ScriptのWebアプリURLを入力してください。
-      </p>
-
-      <div class="mb-4">
-        <label class="block text-xs font-medium text-slate-300 mb-1">WebアプリURL (exec)</label>
-        <input type="text" id="gasUrlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
-      </div>
-
-      <div class="flex justify-end space-x-3">
-        <button id="saveSettingsBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition">
-          設定を保存
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <div id="loadingOverlay" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center hidden">
-    <div class="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
-    <p id="loadingText" class="text-slate-200 font-medium text-sm">処理中...</p>
-  </div>
-
-  <script>
-    // ==========================================
-    // 定数・状態管理
-    // ==========================================
-    const DEFAULT_GAS_URL = ""; // GASデプロイURLがある場合はここに直接指定も可能
-    let currentGasUrl = localStorage.getItem('GAS_WEB_APP_URL') || DEFAULT_GAS_URL;
-
-    let mediaStream = null;
-    let currentFacingMode = "user"; // インカメラをデフォルトに設定
-    let currentDeviceId = null;
-
-    let isScanning = true;
-    let detectionCounter = 0;
-    let countdownValue = 3;
-    let countdownInterval = null;
-    let capturedBase64Data = null;
-    let lastFrameData = null;
-
-    // DOM要素
-    const video = document.getElementById('webcam');
-    const cameraSelect = document.getElementById('cameraSelect');
-    const switchCameraBtn = document.getElementById('switchCameraBtn');
-    const openSettingsBtn = document.getElementById('openSettingsBtn');
-    const manualCaptureBtn = document.getElementById('manualCaptureBtn');
-    const guideBox = document.getElementById('guideBox');
-    const countdownOverlay = document.getElementById('countdownOverlay');
-    const statusMessage = document.getElementById('statusMessage');
-    const gasStatusText = document.getElementById('gasStatusText');
-
-    const confirmModal = document.getElementById('confirmModal');
-    const previewImage = document.getElementById('previewImage');
-    const retakeBtn = document.getElementById('retakeBtn');
-    const saveBtn = document.getElementById('saveBtn');
-
-    const successModal = document.getElementById('successModal');
-    const receiptNumberText = document.getElementById('receiptNumberText');
-    const nextVisitorBtn = document.getElementById('nextVisitorBtn');
-
-    const settingsModal = document.getElementById('settingsModal');
-    const gasUrlInput = document.getElementById('gasUrlInput');
-    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
-    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
-
-    const loadingOverlay = document.getElementById('loadingOverlay');
-    const loadingText = document.getElementById('loadingText');
-
-    window.addEventListener('DOMContentLoaded', async () => {
-      updateGasStatusDisplay();
-      await initCameraList();
-      await startCamera();
-      requestAnimationFrame(processFrame);
-    });
-
-    // GAS URL設定表示更新
-    function updateGasStatusDisplay() {
-      if (typeof google !== 'undefined' && google && google.script && google.script.run) {
-        gasStatusText.innerText = "GAS連携: 接続完了 (直接保存)";
-        gasStatusText.classList.replace("text-slate-400", "text-emerald-400");
-        gasStatusText.classList.replace("text-amber-400", "text-emerald-400");
-      } else if (currentGasUrl) {
-        gasStatusText.innerText = "GAS送信先: 設定済み";
-        gasStatusText.classList.replace("text-slate-400", "text-emerald-400");
-        gasStatusText.classList.replace("text-amber-400", "text-emerald-400");
+    try {
+      // CORS対策として fetch の挙動を調整。
+      // content-typeを text/plain にすることでプリフライト(OPTIONS)リクエストを回避し、GASへ送信可能にする。
+      const response = await fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify({ image: capturedBase64 }),
+        headers: {
+          "Content-Type": "text/plain" 
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        document.getElementById('displayReceipt').innerText = result.receiptNumber;
+        showView('view-success');
       } else {
-        gasStatusText.innerText = "GAS送信先: 未設定 (⚙️より設定してください)";
-        gasStatusText.classList.replace("text-emerald-400", "text-amber-400");
+        throw new Error(result.error);
       }
+    } catch (error) {
+      alert("通信エラーが発生しました: " + error.message);
+      // エラー時はボタンを復活させる
+      document.getElementById('actionButtons').style.display = 'block';
+      document.getElementById('loadingMsg').style.display = 'none';
     }
+  }
+</script>
 
-    async function initCameraList() {
-      try {
-        // パーミッション取得のため一時アクセス
-        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
-        tempStream.getTracks().forEach(track => track.stop());
-
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(d => d.kind === 'videoinput');
-
-        cameraSelect.innerHTML = '';
-        if (videoDevices.length === 0) {
-          cameraSelect.innerHTML = '<option value="">カメラが見つかりません</option>';
-          return;
-        }
-
-        videoDevices.forEach((device, idx) => {
-          const opt = document.createElement('option');
-          opt.value = device.deviceId;
-          opt.textContent = device.label || `カメラ ${idx + 1}`;
-          cameraSelect.appendChild(opt);
-        });
-
-      } catch (err) {
-        console.warn("Camera list init warning:", err);
-      }
-    }
-
-    async function startCamera() {
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-      }
-
-      // iPad横置きおよびインカメラ用制約
-      const constraints = {
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: currentDeviceId ? undefined : currentFacingMode
-        }
-      };
-
-      if (currentDeviceId) {
-        constraints.video.deviceId = { exact: currentDeviceId };
-      }
-
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = mediaStream;
-
-        // 映像の左右反転制御 (インカメラは鏡像表示、アウトカメラは通常表示)
-        const activeTrack = mediaStream.getVideoTracks()[0];
-        const settings = activeTrack.getSettings();
-        
-        if (settings.facingMode === 'environment' || (currentFacingMode === 'environment' && !currentDeviceId)) {
-          video.classList.remove('scale-x-[-1]');
-        } else {
-          video.classList.add('scale-x-[-1]');
-        }
-
-        // カメラドロップダウンの選択更新
-        if (settings.deviceId) {
-          cameraSelect.value = settings.deviceId;
-        }
-
-      } catch (err) {
-        console.error("Camera start error:", err);
-        // デバイスID指定で失敗した場合はフォールバック
-        if (currentDeviceId) {
-          currentDeviceId = null;
-          await startCamera();
-        } else {
-          alert("カメラの起動に失敗しました。カメラの権限許可をご確認ください。");
-        }
-      }
-    }
-
-    // カメラ切替イベント
-    switchCameraBtn.addEventListener('click', async () => {
-      currentFacingMode = (currentFacingMode === "user") ? "environment" : "user";
-      currentDeviceId = null;
-      await startCamera();
-    });
-
-    cameraSelect.addEventListener('change', async (e) => {
-      currentDeviceId = e.target.value;
-      await startCamera();
-    });
-
-    function processFrame() {
-      if (isScanning && video.readyState === video.HAVE_ENOUGH_DATA) {
-        const canvas = document.getElementById('analysisCanvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = 160;
-        canvas.height = 100;
-
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-        if (lastFrameData) {
-          const motion = calculateFrameDifference(lastFrameData.data, currentFrame.data);
-          
-          // 静止かつ枠内にカードが存在すると判定
-          if (motion < 8) { // 低動き判定（静止状態）
-            detectionCounter++;
-            if (detectionCounter > 15 && !countdownInterval) { // 約0.5秒安定でカウントダウン
-              startCountdown();
-            }
-          } else {
-            resetCountdown();
-          }
-        }
-        lastFrameData = currentFrame;
-      }
-
-      requestAnimationFrame(processFrame);
-    }
-
-    // フレーム差分計算 (輝度変化)
-    function calculateFrameDifference(data1, data2) {
-      let diff = 0;
-      for (let i = 0; i < data1.length; i += 16) { // サンプリングして高速化
-        diff += Math.abs(data1[i] - data2[i]);
-      }
-      return diff / (data1.length / 16);
-    }
-
-    function startCountdown() {
-      guideBox.classList.add('detected');
-      countdownOverlay.classList.remove('opacity-0', 'scale-50');
-      countdownValue = 3;
-      countdownOverlay.innerText = countdownValue;
-
-      countdownInterval = setInterval(() => {
-        countdownValue--;
-        if (countdownValue > 0) {
-          countdownOverlay.innerText = countdownValue;
-        } else {
-          clearInterval(countdownInterval);
-          countdownInterval = null;
-          capturePhoto();
-        }
-      }, 600);
-    }
-
-    function resetCountdown() {
-      if (countdownInterval) {
-        clearInterval(countdownInterval);
-        countdownInterval = null;
-      }
-      detectionCounter = 0;
-      guideBox.classList.remove('detected');
-      countdownOverlay.classList.add('opacity-0', 'scale-50');
-    }
-
-    // 手動シャッター
-    manualCaptureBtn.addEventListener('click', () => {
-      capturePhoto();
-    });
-
-    function capturePhoto() {
-      isScanning = false;
-      resetCountdown();
-
-      const canvas = document.getElementById('captureCanvas');
-      const ctx = canvas.getContext('2d');
-
-      // 1.6:1 名刺比率で切り出し
-      const aspect = 1.6 / 1;
-      let targetWidth = video.videoWidth * 0.7;
-      let targetHeight = targetWidth / aspect;
-
-      if (targetHeight > video.videoHeight * 0.8) {
-        targetHeight = video.videoHeight * 0.8;
-        targetWidth = targetHeight * aspect;
-      }
-
-      const startX = (video.videoWidth - targetWidth) / 2;
-      const startY = (video.videoHeight - targetHeight) / 2;
-
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-
-      // 鏡像反転されていた場合は切り出し側も反転
-      ctx.save();
-      if (video.classList.contains('scale-x-[-1]')) {
-        ctx.translate(canvas.width, 0);
-        ctx.scale(-1, 1);
-      }
-
-      ctx.drawImage(
-        video,
-        startX, startY, targetWidth, targetHeight,
-        0, 0, targetWidth, targetHeight
-      );
-      ctx.restore();
-
-      capturedBase64Data = canvas.toDataURL('image/jpeg', 0.88);
-      previewImage.src = capturedBase64Data;
-      confirmModal.classList.remove('hidden');
-    }
-
-    // 撮り直すボタン
-    retakeBtn.addEventListener('click', () => {
-      confirmModal.classList.add('hidden');
-      capturedBase64Data = null;
-      isScanning = true;
-    });
-
-    saveBtn.addEventListener('click', async () => {
-      confirmModal.classList.add('hidden');
-      showLoading("Google Driveへ保存中...");
-
-      // 1. GAS内部実行環境（Code.gsのCONFIG設定値を直接使用）
-      if (typeof google !== 'undefined' && google && google.script && google.script.run) {
-        google.script.run
-          .withSuccessHandler((result) => {
-            hideLoading();
-            if (result && result.success) {
-              receiptNumberText.innerText = result.receiptNumber || "000000";
-              successModal.classList.remove('hidden');
-            } else {
-              alert("保存エラー: " + ((result && result.error) || "送信に失敗しました"));
-              isScanning = true;
-            }
-          })
-          .withFailureHandler((err) => {
-            hideLoading();
-            console.error("GAS execution error:", err);
-            alert("保存処理中にエラーが発生しました: " + (err.message || err));
-            isScanning = true;
-          })
-          .saveRecord(capturedBase64Data);
-        return;
-      }
-
-      // 2. 外部WebAPI経由送信の場合
-      if (!currentGasUrl) {
-        hideLoading();
-        openSettingsModal();
-        alert("送信先のGAS WebアプリURLが設定されていません。URLを設定してください。");
-        return;
-      }
-
-      try {
-        const response = await fetch(currentGasUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'text/plain;charset=utf-8'
-          },
-          body: JSON.stringify({ image: capturedBase64Data })
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-          receiptNumberText.innerText = result.receiptNumber || "000000";
-          successModal.classList.remove('hidden');
-        } else {
-          alert("保存エラー: " + (result.error || "送信に失敗しました"));
-          isScanning = true;
-        }
-      } catch (err) {
-        console.error("Upload error:", err);
-        alert("通信エラーが発生しました: " + err.message);
-        isScanning = true;
-      } finally {
-        hideLoading();
-      }
-    });
-
-    // 次の受付へボタン
-    nextVisitorBtn.addEventListener('click', () => {
-      successModal.classList.add('hidden');
-      capturedBase64Data = null;
-      isScanning = true;
-    });
-
-    function openSettingsModal() {
-      gasUrlInput.value = currentGasUrl;
-      settingsModal.classList.remove('hidden');
-    }
-
-    openSettingsBtn.addEventListener('click', openSettingsModal);
-    closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
-
-    saveSettingsBtn.addEventListener('click', () => {
-      const inputUrl = gasUrlInput.value.trim();
-      currentGasUrl = inputUrl;
-      localStorage.setItem('GAS_WEB_APP_URL', inputUrl);
-      updateGasStatusDisplay();
-      settingsModal.classList.add('hidden');
-    });
-
-    // ユーティリティ
-    function showLoading(msg) {
-      loadingText.innerText = msg || "処理中...";
-      loadingOverlay.classList.remove('hidden');
-    }
-
-    function hideLoading() {
-      loadingOverlay.classList.add('hidden');
-    }
-  </script>
 </body>
 </html>
