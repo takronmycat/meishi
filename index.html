@@ -99,8 +99,8 @@
     showView('view-camera');
     const video = document.getElementById('videoArea');
     try {
-      // 背面カメラを優先
-      const constraints = { video: { facingMode: "environment" } };
+      // 前面カメラを優先
+      const constraints = { video: { facingMode: "user" } };
       videoStream = await navigator.mediaDevices.getUserMedia(constraints);
       video.srcObject = videoStream;
     } catch (err) {
